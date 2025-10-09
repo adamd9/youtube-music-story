@@ -1101,17 +1101,7 @@ function showError(message) {
     }, 5000);
 }
 
-// Show access denied overlay when user is not added to developer dashboard
-function showAccessDeniedOverlay() {
-    // Only show once per session
-    if (state.accessDeniedShown) return;
-    state.accessDeniedShown = true;
-    
-    const overlay = document.getElementById('access-denied-overlay');
-    if (overlay) {
-        overlay.classList.remove('hidden');
-    }
-}
+ 
 
 // Initialize the player when the page loads (YouTube-only)
 document.addEventListener('DOMContentLoaded', async () => {
