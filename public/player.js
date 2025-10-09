@@ -404,7 +404,8 @@ const state = {
     spotifyClipStartTime: 0,
     spotifyClipPlayedMs: 0,
     // Track if access denied overlay has been shown
-    accessDeniedShown: false
+    accessDeniedShown: false,
+    uiBound: false
 };
 
 // Custom Credentials Management
@@ -622,6 +623,14 @@ function applyModeLayoutVisibility() {
 // Initialize mode early (UI application will occur after DOM elements are bound)
 state.mode = getInitialMode();
 applyModeToUI(state.mode);
+
+// Ensure transport buttons work in all modes (including YouTube where Spotify SDK isn't initialized)
+if (!state.uiBound) {
+    if (playPauseButton) playPauseButton.addEventListener('click', togglePlayPause);
+    if (previousButton) previousButton.addEventListener('click', playPrevious);
+    if (nextButton) nextButton.addEventListener('click', playNext);
+    state.uiBound = true;
+}
 
 // Wire mode selector
 if (modeSelect) {
@@ -1014,9 +1023,13 @@ function setupEventListeners() {
         });
     }
     
-    playPauseButton.addEventListener('click', togglePlayPause);
-    previousButton.addEventListener('click', playPrevious);
-    nextButton.addEventListener('click', playNext);
+    // Note: We also bind these globally below for YouTube mode; guard against double-binding
+    if (!state.uiBound) {
+        if (playPauseButton) playPauseButton.addEventListener('click', togglePlayPause);
+        if (previousButton) previousButton.addEventListener('click', playPrevious);
+        if (nextButton) nextButton.addEventListener('click', playNext);
+        state.uiBound = true;
+    }
     
     // Progress bar click
     const progressContainer = document.querySelector('.progress-container');

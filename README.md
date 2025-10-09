@@ -1,16 +1,18 @@
-# Music Story (Spotify)
+# Music Story (Spotify or YouTube)
 
 **Transform any artist or music topic into an immersive audio documentary**
 
-Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated Spotify tracks. Simply enter a prompt—like "The Beatles early years" or "90s grunge movement"—and get an instant audio experience that tells the story behind the music.
+Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks. You can run the app in one of two exclusive modes: Spotify or YouTube.
 
-Built with OpenAI's GPT-4 for intelligent content generation, advanced text-to-speech for professional narration, and Spotify's Web Playback SDK for seamless audio delivery.
+Built with OpenAI for intelligent content generation and TTS narration, Spotify Web Playback SDK for Spotify mode, and the YouTube IFrame Player + Data API for YouTube mode.
 
 ## Features
 
 - **AI-Powered Documentary Generation**: Enter any artist, band, or music topic and get an instant audio documentary with historical context, cultural insights, and 5 perfectly selected tracks
 - **Professional AI Narration**: High-quality text-to-speech narration using OpenAI's latest models, with customizable voice and pacing
+- **Exclusive Modes**: Choose Spotify or YouTube. The app behaves as a single-source player (no mixed playback), which keeps UX simple and predictable.
 - **Seamless Spotify Integration**: Direct playback through Spotify Premium accounts using the Web Playback SDK
+- **YouTube Mode (no Spotify required)**: Generate and play documentaries without Spotify login. Tracks are mapped to YouTube videos using the YouTube Data API.
 - **Intelligent Track Selection**: AI analyzes artist catalogs to choose the most relevant songs that tell the story
 - **Save & Share**: Persistent playlists with shareable links—generate once, listen anywhere
 - **Real-Time Progress**: Live updates as your documentary is being created, from artist identification to narration generation
@@ -22,8 +24,9 @@ Built with OpenAI's GPT-4 for intelligent content generation, advanced text-to-s
 
 - Node.js (v14 or later)
 - npm (comes with Node.js)
-- A Spotify Premium account
-- A Spotify Developer account to create an application
+- A Spotify Premium account (Spotify mode only)
+- A Spotify Developer account to create an application (Spotify mode only)
+- A Google Cloud project with YouTube Data API v3 enabled (YouTube mode only)
 
 ## Setup
 
@@ -63,21 +66,32 @@ Built with OpenAI's GPT-4 for intelligent content generation, advanced text-to-s
 
    # Development Features
    MOCK_TTS=0         # set 1 to use a local placeholder MP3 instead of OpenAI TTS
+
+    # YouTube Data API v3 (YouTube mode only)
+    # Create an API key in Google Cloud Console and restrict it to YouTube Data API v3
+    YOUTUBE_API_KEY=your_youtube_data_api_key
    ```
 
-### 3. Install Dependencies
+### 3. Enable YouTube Data API v3 (for YouTube mode)
+
+1. Go to Google Cloud Console → APIs & Services → Credentials
+2. Create an API key (restrict it to the YouTube Data API v3)
+3. Enable the API: APIs & Services → Library → "YouTube Data API v3"
+4. Paste the key into `YOUTUBE_API_KEY` in `.env`
+
+### 4. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 4. Add MP3 Files
+### 5. Add MP3 Files (optional)
 
 1. Create a directory called `public/audio` in your project root
 2. Add your MP3 files to this directory
 3. Update the `setupDefaultPlaylist()` function in `public/player.js` to include your MP3 files
 
-### 5. Start the Server
+### 6. Start the Server
 
 ```bash
 npm run dev
@@ -85,7 +99,7 @@ npm run dev
 
 This runs the modular server (`src/server.js`) with nodemon and serves `public/`.
 
-### 6. Access the Application
+### 7. Access the Application
 
 Open your web browser and navigate to:
 
@@ -95,10 +109,18 @@ http://localhost:8888
 
 ## How to Use
 
-1. Go to `http://localhost:8888/player.html` and click "Login with Spotify Premium".
+### Pick a Mode
+
+- Spotify mode: visit `http://localhost:8888/?mode=spotify` (you’ll be redirected to `player.html` and prompted to login)
+- YouTube mode: visit `http://localhost:8888/?mode=youtube` (no Spotify login required)
+
+The mode is exclusive and drives routing, SDK loading, generation flow, and UI visibility.
+
+#### Spotify mode flow
+1. Go to `http://localhost:8888/?mode=spotify` and click "Login with Spotify Premium" on `player.html`.
 2. Authorize the app; the player initializes and transfers playback to this device.
-3. To generate a documentary, enter a topic (e.g., "The Prodigy") and click "Generate Outline".
-4. The app uses a **multi-stage intelligent workflow** (see flow diagram below):
+3. Generate a documentary by entering a topic and clicking "Generate Outline".
+4. The app uses a **multi-stage intelligent workflow** (see flow diagram below).
    - **Stage 1**: Identifies the artist using LLM normalization + Spotify search
    - **Stage 2**: LLM plans the documentary, choosing 5 specific tracks with narrative justification
    - **Stage 3**: Searches Spotify for those exact tracks
@@ -108,6 +130,15 @@ http://localhost:8888
    - **Stage 7**: Saves playlist and builds playable timeline
 5. Use controls to play/pause/seek. The UI shows status updates during generation.
 6. Click "Refresh" under "My Playlists" to see saved documentary items. Use "Share" to copy a shareable link.
+
+#### YouTube mode flow (no Spotify)
+
+1. Go to `http://localhost:8888/?mode=youtube`.
+2. Enter a topic and click "Generate Outline". The server uses OpenAI to generate the timeline without Spotify.
+3. The client maps song entries to YouTube using `/api/youtube-map-tracks` and plays via the YouTube IFrame player.
+4. Playlists are saved with `source: "youtube"` and `ownerId: "anonymous"` by default.
+
+You can import a saved playlist via the "Import by ID" button. The URL includes `?playlistId=...` for refresh persistence.
 
 ## Documentary Generation Flow
 
@@ -211,8 +242,24 @@ To customize the playlist, edit the `setupDefaultPlaylist()` function in `public
 - **OAuth “User not registered in the Developer Dashboard”**: Add your account as a user in your Spotify app’s settings.
 - **Playback issues**: Ensure Premium is active; verify Web Playback SDK initialized and device playback was transferred.
 - **CORS**: Serve from `http://localhost:8888` to match the redirect URI.
-- **Outline button doesn’t respond**: We bind listeners directly and with a delegated fallback. Ensure you’re on `player.html`.
+- **Outline button doesn’t respond**: In YouTube mode, the controls are on `/` (index). In Spotify mode, they’re on `/player.html`.
 - **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration.
+
+## Design Notes (Exclusive Modes)
+
+- **Routing**
+  - `/` with `?mode=spotify` → redirects to `/player.html?mode=spotify`
+  - `/` with `?mode=youtube` → stays on index; YouTube player and generation controls visible
+- **SDK Loading**
+  - Index only loads YouTube IFrame API
+  - Player page only loads Spotify Web Playback SDK
+- **Persistence**
+  - Playlists saved to `data/playlists/*.json`
+  - Each record includes `source: "spotify" | "youtube"`
+  - YouTube mappings are embedded on each `song` item as `youtube: { videoId, title, channelId, durationSec, matchedConfidence }`
+- **Owners**
+  - Spotify mode lists by real Spotify user ID
+  - YouTube mode lists by `ownerId: "anonymous"` (shared). You can switch to a per-browser UUID if you prefer isolation.
 
 ---
 
