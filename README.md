@@ -2,7 +2,7 @@
 
 **Transform any artist or music topic into an immersive audio documentary**
 
-Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks. This build is YouTube-only and requires no Spotify account.
+Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks.
 
 Built with OpenAI for intelligent content generation and TTS narration, and the YouTube IFrame Player + Data API for video playback and search.
 

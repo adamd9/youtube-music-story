@@ -19,7 +19,7 @@ class JobManager {
 
   /**
    * Create a new job
-   * @param {string} userId - Spotify user ID
+   * @param {string} userId - Owner ID (e.g., 'anonymous')
    * @param {object} params - Job parameters (topic, prompt, etc.)
    * @returns {object} Job object with id
    */
