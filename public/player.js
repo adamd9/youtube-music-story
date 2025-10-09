@@ -191,6 +191,7 @@ const dbg = (...args) => { if (DEBUG) console.log('[DBG]', ...args); };
 // My Playlists rendering and actions
 async function refreshMyPlaylists() {
     const ownerId = (state.mode === 'youtube') ? 'anonymous' : await fetchSpotifyUserId();
+    dbg('refreshMyPlaylists: owner', ownerId, 'mode', state.mode);
     if (!ownerId) {
         if (myPlaylistsEmpty) myPlaylistsEmpty.textContent = 'Login required to view saved playlists.';
         return;
@@ -207,6 +208,7 @@ async function refreshMyPlaylists() {
         
         const playlists = Array.isArray(playlistsJson?.playlists) ? playlistsJson.playlists : [];
         const jobs = Array.isArray(jobsJson?.jobs) ? jobsJson.jobs : [];
+        dbg('refreshMyPlaylists: fetched', { playlists: playlists.length, jobs: jobs.length });
         
         // Filter active jobs (pending or running)
         const activeJobs = jobs.filter(j => j.status === 'pending' || j.status === 'running');
@@ -1563,6 +1565,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // Ensure layout respects mode on initial load
     applyModeLayoutVisibility();
+    // In YouTube mode, list anonymous playlists immediately
+    if (state.mode === 'youtube') {
+        try { await refreshMyPlaylists(); } catch {}
+    }
     // Hide login block if mode is YouTube and no Spotify token
     if (state.mode === 'youtube' && !state.accessToken) {
         const loginBlock = document.getElementById('login-block');
@@ -1784,9 +1790,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     body: JSON.stringify({ topic, prompt, narrationTargetSecs })
                 });
                 if (!resp.ok) throw new Error(`Generation failed: ${resp.status}`);
-                const data = await resp.json();
-                buildFromDoc(data);
-                // Save playlist with source: 'youtube' and anonymous owner
+                let data = await resp.json();
+
+                // 1) Save immediately to get a playlistId for TTS filenames and share
                 const ownerId = 'anonymous';
                 const save = await fetch('/api/playlists', {
                     method: 'POST',
@@ -1800,32 +1806,55 @@ document.addEventListener('DOMContentLoaded', async () => {
                         source: 'youtube'
                     })
                 });
-                if (save.ok) {
-                    try { await refreshMyPlaylists(); } catch {}
-                    const j = await save.json();
-                    const pid = j?.playlist?.id;
-                    if (pid) {
-                        state.loadedPlaylistId = pid;
-                        // Update URL to include playlistId for refresh persistence
-                        try {
-                            const u = new URL(window.location.href);
-                            u.searchParams.set('playlistId', pid);
-                            window.history.replaceState({}, '', u.toString());
-                        } catch {}
-                        // If we already have mapped youtube fields in lastDoc, patch the saved playlist now
-                        try {
-                            const hasYoutube = !!(state.lastDoc && Array.isArray(state.lastDoc.timeline) && state.lastDoc.timeline.some(it => it && it.type === 'song' && it.youtube && it.youtube.videoId));
-                            if (hasYoutube) {
-                                fetch(`/api/playlists/${encodeURIComponent(pid)}`, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ timeline: state.lastDoc.timeline, source: 'youtube' })
-                                }).catch(() => {});
-                            }
-                        } catch {}
-                        if (saveStatusEl) saveStatusEl.textContent = `Saved (YouTube). Share ID: ${pid} — ${window.location.origin}/player.html?playlistId=${pid}`;
-                    }
+                if (!save.ok) throw new Error('Failed to save initial playlist');
+                const saved = await save.json();
+                const pid = saved?.playlist?.id;
+                if (pid) {
+                    state.loadedPlaylistId = pid;
+                    try {
+                        const u = new URL(window.location.href);
+                        u.searchParams.set('playlistId', pid);
+                        window.history.replaceState({}, '', u.toString());
+                    } catch {}
                 }
+
+                // 2) Generate TTS (mock or real) and attach to doc
+                try { if (docStatusEl) docStatusEl.textContent = 'Generating narration…'; } catch {}
+                data = await generateTTSForDoc(data, pid);
+
+                // 3) Build UI from updated doc (with tts_url)
+                buildFromDoc(data);
+
+                // 4) Map YouTube videos; when mappings are ready, we PATCH in mapYouTubeForCurrentPlaylist()
+                // Kick off mapping now (it internally PATCHes when done if state.loadedPlaylistId exists)
+                try { await mapYouTubeForCurrentPlaylist(); } catch {}
+
+                // 5) Persist TTS URLs back to saved playlist
+                if (pid) {
+                    const patchBody = { timeline: data?.timeline || [], source: 'youtube' };
+                    // Retry once on 404 in case of a race
+                    const doPatch = async (retry) => {
+                        const r = await fetch(`/api/playlists/${encodeURIComponent(pid)}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(patchBody)
+                        });
+                        if (!r.ok && r.status === 404 && retry) {
+                            await new Promise(res => setTimeout(res, 500));
+                            return doPatch(false);
+                        }
+                        return r;
+                    };
+                    doPatch(true).catch(() => {});
+                }
+
+                // 6) Refresh list and set share message
+                try { await refreshMyPlaylists(); } catch {}
+                if (pid && saveStatusEl) saveStatusEl.textContent = `Saved (YouTube). Share ID: ${pid} — ${window.location.origin}/player.html?playlistId=${pid}`;
+                // Update UI state
+                try { if (docSpinner) docSpinner.classList.add('hidden'); } catch {}
+                try { if (generateDocBtn) generateDocBtn.disabled = false; } catch {}
+                try { if (docStatusEl) docStatusEl.textContent = 'Ready.'; } catch {}
                 return;
             }
 
