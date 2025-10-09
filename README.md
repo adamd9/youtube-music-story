@@ -1,58 +1,33 @@
-# Music Story (Spotify or YouTube)
+# Music Story (YouTube)
 
 **Transform any artist or music topic into an immersive audio documentary**
 
-Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks. You can run the app in one of two exclusive modes: Spotify or YouTube.
+Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks. This build is YouTube-only and requires no Spotify account.
 
-Built with OpenAI for intelligent content generation and TTS narration, Spotify Web Playback SDK for Spotify mode, and the YouTube IFrame Player + Data API for YouTube mode.
+Built with OpenAI for intelligent content generation and TTS narration, and the YouTube IFrame Player + Data API for video playback and search.
 
 ## Features
 
-- **AI-Powered Documentary Generation**: Enter any artist, band, or music topic and get an instant audio documentary with historical context, cultural insights, and 5 perfectly selected tracks
-- **Professional AI Narration**: High-quality text-to-speech narration using OpenAI's latest models, with customizable voice and pacing
-- **Exclusive Modes**: Choose Spotify or YouTube. The app behaves as a single-source player (no mixed playback), which keeps UX simple and predictable.
-- **Seamless Spotify Integration**: Direct playback through Spotify Premium accounts using the Web Playback SDK
-- **YouTube Mode (no Spotify required)**: Generate and play documentaries without Spotify login. Tracks are mapped to YouTube videos using the YouTube Data API.
-- **Intelligent Track Selection**: AI analyzes artist catalogs to choose the most relevant songs that tell the story
-- **Save & Share**: Persistent playlists with shareable links—generate once, listen anywhere
-- **Real-Time Progress**: Live updates as your documentary is being created, from artist identification to narration generation
-- **Beautiful UI**: Clean, responsive interface optimized for both desktop and mobile
-- **Custom Credentials**: Use your own Spotify Developer app to bypass access restrictions
-- **Mock Mode**: Development mode with placeholder audio to save API costs during testing
+- **AI-Powered Documentary Generation**: Enter any artist, band, or music topic and get an instant audio documentary with historical context, cultural insights, and 5 carefully selected tracks
+- **Professional AI Narration**: High-quality text-to-speech narration using OpenAI's latest models
+- **YouTube Playback (no login required)**: Tracks are mapped to YouTube and played via the YouTube IFrame Player
+- **Save & Share**: Persistent playlists with shareable links
+- **Responsive UI**: Clean interface optimized for desktop and mobile
+- **Mock Mode**: Optional dev mode with placeholder audio to save API costs during testing
 
 ## Prerequisites
 
 - Node.js (v14 or later)
 - npm (comes with Node.js)
-- A Spotify Premium account (Spotify mode only)
-- A Spotify Developer account to create an application (Spotify mode only)
-- A Google Cloud project with YouTube Data API v3 enabled (YouTube mode only)
+- A Google Cloud project with YouTube Data API v3 enabled
 
 ## Setup
 
-### 1. Create a Spotify Application
-
-1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-2. Log in with your Spotify account
-3. Click "Create an App"
-4. Fill in the following details:
-   - App name: Spotify MP3 Mix Player
-   - App description: A web player that mixes Spotify tracks with local MP3s
-   - Website: http://localhost:8888
-   - Redirect URI: http://localhost:8888/callback
-5. Click "Save"
-6. Note down your `Client ID` and `Client Secret` (click "Show Client Secret")
-
-### 2. Configure Environment Variables
+### 1. Configure Environment Variables
 
 1. Rename the `.env.example` file to `.env`
 2. Update the following variables in the `.env` file:
    ```env
-   # Spotify
-   CLIENT_ID=your_spotify_client_id
-   CLIENT_SECRET=your_spotify_client_secret
-   # Note: Redirect URI is automatically set to {current_origin}/callback
-
    # Server
    PORT=8888
    CLIENT_DEBUG=0     # set 1 for verbose client logs
@@ -62,36 +37,37 @@ Built with OpenAI for intelligent content generation and TTS narration, Spotify 
    OPENAI_API_KEY=your_openai_api_key
    OPENAI_TTS_MODEL=gpt-4o-mini-tts
    OPENAI_TTS_VOICE=alloy
+   OPENAI_TTS_SPEED=1.0
    TTS_OUTPUT_DIR=public/tts
 
    # Development Features
    MOCK_TTS=0         # set 1 to use a local placeholder MP3 instead of OpenAI TTS
 
-    # YouTube Data API v3 (YouTube mode only)
-    # Create an API key in Google Cloud Console and restrict it to YouTube Data API v3
-    YOUTUBE_API_KEY=your_youtube_data_api_key
+   # YouTube Data API v3
+   # Create an API key in Google Cloud Console and restrict it to YouTube Data API v3
+   YOUTUBE_API_KEY=your_youtube_data_api_key
    ```
 
-### 3. Enable YouTube Data API v3 (for YouTube mode)
+### 2. Enable YouTube Data API v3
 
 1. Go to Google Cloud Console → APIs & Services → Credentials
 2. Create an API key (restrict it to the YouTube Data API v3)
 3. Enable the API: APIs & Services → Library → "YouTube Data API v3"
 4. Paste the key into `YOUTUBE_API_KEY` in `.env`
 
-### 4. Install Dependencies
+### 3. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 5. Add MP3 Files (optional)
+### 4. Add MP3 Files (optional)
 
 1. Create a directory called `public/audio` in your project root
 2. Add your MP3 files to this directory
 3. Update the `setupDefaultPlaylist()` function in `public/player.js` to include your MP3 files
 
-### 6. Start the Server
+### 5. Start the Server
 
 ```bash
 npm run dev
@@ -99,7 +75,7 @@ npm run dev
 
 This runs the modular server (`src/server.js`) with nodemon and serves `public/`.
 
-### 7. Access the Application
+### 6. Access the Application
 
 Open your web browser and navigate to:
 
@@ -109,90 +85,19 @@ http://localhost:8888
 
 ## How to Use
 
-### Pick a Mode
-
-- Spotify mode: visit `http://localhost:8888/?mode=spotify` (you’ll be redirected to `player.html` and prompted to login)
-- YouTube mode: visit `http://localhost:8888/?mode=youtube` (no Spotify login required)
-
-The mode is exclusive and drives routing, SDK loading, generation flow, and UI visibility.
-
-#### Spotify mode flow
-1. Go to `http://localhost:8888/?mode=spotify` and click "Login with Spotify Premium" on `player.html`.
-2. Authorize the app; the player initializes and transfers playback to this device.
-3. Generate a documentary by entering a topic and clicking "Generate Outline".
-4. The app uses a **multi-stage intelligent workflow** (see flow diagram below).
-   - **Stage 1**: Identifies the artist using LLM normalization + Spotify search
-   - **Stage 2**: LLM plans the documentary, choosing 5 specific tracks with narrative justification
-   - **Stage 3**: Searches Spotify for those exact tracks
-   - **Stage 4**: Fetches backup catalog if any tracks are missing
-   - **Stage 5**: LLM generates final timeline following the plan
-   - **Stage 6**: Generates TTS narration with British music journalist voice (or mock mode)
-   - **Stage 7**: Saves playlist and builds playable timeline
-5. Use controls to play/pause/seek. The UI shows status updates during generation.
-6. Click "Refresh" under "My Playlists" to see saved documentary items. Use "Share" to copy a shareable link.
-
-#### YouTube mode flow (no Spotify)
-
-1. Go to `http://localhost:8888/?mode=youtube`.
-2. Enter a topic and click "Generate Outline". The server uses OpenAI to generate the timeline without Spotify.
-3. The client maps song entries to YouTube using `/api/youtube-map-tracks` and plays via the YouTube IFrame player.
-4. Playlists are saved with `source: "youtube"` and `ownerId: "anonymous"` by default.
+1. Open `http://localhost:8888`.
+2. Enter a topic and click "Generate Outline". The server generates the timeline.
+3. The client maps songs to YouTube and plays via the YouTube IFrame player.
+4. Playlists are saved with `ownerId: "anonymous"` by default.
 
 You can import a saved playlist via the "Import by ID" button. The URL includes `?playlistId=...` for refresh persistence.
 
-## Documentary Generation Flow
+## Documentary Generation Flow (high level)
 
-The app uses an intelligent multi-stage workflow where the LLM plans the documentary narrative first, then we fetch the specific tracks it needs:
-
-```mermaid
-flowchart TD
-    Start([User enters artist name]) --> Login{Logged in to<br/>Spotify?}
-    Login -->|No| Error1[Error: Login required]
-    Login -->|Yes| Stage1[Stage 1: Identify Artist]
-  
-    Stage1 --> LLM1[LLM: Normalize artist name]
-    LLM1 --> Spotify1[Spotify: Search for artist]
-    Spotify1 --> CheckArtist{Artist found?}
-    CheckArtist -->|No| Error2[Error: Artist not found]
-    CheckArtist -->|Yes| TopTracks[Fetch top 20 tracks for context]
-  
-    TopTracks --> Stage2[Stage 2: Plan Documentary]
-    Stage2 --> LLM2[LLM: Create documentary plan<br/>- Title & narrative arc<br/>- Era to cover<br/>- 5 specific required tracks<br/>- Why each track is essential<br/>- Narrative role of each]
-  
-    LLM2 --> Stage3[Stage 3: Targeted Track Search]
-    Stage3 --> SearchLoop[For each required track:<br/>Search Spotify by name + artist]
-    SearchLoop --> CheckFound{All 5 tracks<br/>found?}
-  
-    CheckFound -->|Yes| Stage5[Stage 5: Generate Final Documentary]
-    CheckFound -->|No| Stage4[Stage 4: Fetch Backup Catalog]
-    Stage4 --> FetchAlbums[Fetch up to 200 albums]
-    FetchAlbums --> SampleTracks[Sample tracks across albums<br/>for broad coverage]
-    SampleTracks --> Stage5
-  
-    Stage5 --> LLM3[LLM: Generate final timeline<br/>following the plan<br/>- Use found tracks<br/>- Interleave narration & songs<br/>- Chronological order]
-  
-    LLM3 --> Stage6[Stage 6: Generate TTS Narration]
-    Stage6 --> MockCheck{MOCK_TTS<br/>enabled?}
-    MockCheck -->|Yes| MockTTS[Return placeholder MP3]
-    MockCheck -->|No| RealTTS[OpenAI TTS with British<br/>music journalist voice]
-  
-    MockTTS --> Stage7[Stage 7: Save & Build Playlist]
-    RealTTS --> Stage7
-    Stage7 --> SaveDB[(Save to filesystem<br/>data/playlists/)]
-    SaveDB --> BuildUI[Build playable timeline<br/>in player UI]
-    BuildUI --> Done([Ready to play!])
-  
-    style Stage1 fill:#e1f5ff
-    style Stage2 fill:#fff4e1
-    style Stage3 fill:#e1ffe1
-    style Stage4 fill:#ffe1e1
-    style Stage5 fill:#f0e1ff
-    style Stage6 fill:#ffe1f5
-    style Stage7 fill:#e1fff5
-    style LLM1 fill:#ffd700
-    style LLM2 fill:#ffd700
-    style LLM3 fill:#ffd700
-```
+1. LLM plans the documentary narrative and selects 5 representative songs.
+2. Client maps songs to YouTube videos (title/artist + optional hints).
+3. TTS narration is generated for narration segments.
+4. A playable interleaved timeline is built and saved.
 
 ### Example: The Prodigy
 
@@ -221,13 +126,11 @@ flowchart TD
 }
 ```
 
-**Stage 3**: Searches Spotify for "Charly", "Firestarter", etc. by name
-
-**Stage 5**: Generates final documentary using those exact tracks with proper context
+The client searches YouTube for the selected song titles/artists and picks the best match.
 
 ## Customizing the Default Playlist
 
-To customize the playlist, edit the `setupDefaultPlaylist()` function in `public/player.js`. You can add Spotify tracks or local MP3 files to the playlist.
+To customize defaults, adjust playlist building logic in `public/player.js`. You can add local MP3 narration, tweak mapping, or change UI behavior.
 
 ### Keyboard Shortcuts
 
@@ -239,41 +142,30 @@ To customize the playlist, edit the `setupDefaultPlaylist()` function in `public
 
 ## Troubleshooting
 
-- **OAuth “User not registered in the Developer Dashboard”**: Add your account as a user in your Spotify app’s settings.
-- **Playback issues**: Ensure Premium is active; verify Web Playback SDK initialized and device playback was transferred.
-- **CORS**: Serve from `http://localhost:8888` to match the redirect URI.
-- **Outline button doesn’t respond**: In YouTube mode, the controls are on `/` (index). In Spotify mode, they’re on `/player.html`.
+- **YouTube player not initializing**: Ensure the YouTube IFrame API can load and try a normal refresh.
+- **CORS**: Serve from `http://localhost:8888` (default) or configure your reverse proxy accordingly.
 - **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration.
 
-## Design Notes (Exclusive Modes)
+## Design Notes
 
-- **Routing**
-  - `/` with `?mode=spotify` → redirects to `/player.html?mode=spotify`
-  - `/` with `?mode=youtube` → stays on index; YouTube player and generation controls visible
-- **SDK Loading**
-  - Index only loads YouTube IFrame API
-  - Player page only loads Spotify Web Playback SDK
-- **Persistence**
-  - Playlists saved to `data/playlists/*.json`
-  - Each record includes `source: "spotify" | "youtube"`
-  - YouTube mappings are embedded on each `song` item as `youtube: { videoId, title, channelId, durationSec, matchedConfidence }`
-- **Owners**
-  - Spotify mode lists by real Spotify user ID
-  - YouTube mode lists by `ownerId: "anonymous"` (shared). You can switch to a per-browser UUID if you prefer isolation.
+- **Routing**: The app serves a single YouTube player on `/`.
+- **SDK Loading**: Only the YouTube IFrame API is loaded on the client.
+- **Persistence**: Playlists saved to `data/playlists/*.json`. Each record includes YouTube mapping data per song.
+- **Owners**: Saved playlists use `ownerId: "anonymous"` by default.
 
 ---
 
 ## Environment Variables Reference
 
-- `CLIENT_ID`, `CLIENT_SECRET` - Spotify OAuth credentials (redirect URI is auto-calculated)
 - `PORT` - Server port (default: 8888)
 - `CLIENT_DEBUG`, `SERVER_DEBUG` - Enable verbose logging
 - `OPENAI_API_KEY` - OpenAI API key for LLM and TTS
 - `OPENAI_TTS_MODEL` - TTS model (default: gpt-4o-mini-tts)
 - `OPENAI_TTS_VOICE` - Voice selection (alloy, echo, fable, onyx, nova, shimmer)
-- `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.0, recommended: 1.25 for dynamic delivery)
+- `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.0)
 - `TTS_OUTPUT_DIR` - Where to save generated MP3s
 - `MOCK_TTS` - Set to 1 to use placeholder MP3s instead of OpenAI (saves costs during development)
+- `YOUTUBE_API_KEY` - YouTube Data API v3 key used for mapping/search
 
 ---
 
@@ -282,7 +174,6 @@ To customize the playlist, edit the `setupDefaultPlaylist()` function in `public
 - Run in dev with nodemon: `npm run dev` (uses `src/server.js`).
 - The client’s `DEBUG` mode is toggled from the server via `/config.js` and `CLIENT_DEBUG`.
 - The Generate Outline button shows an inline spinner while work is in progress.
-- If you need to use the single-file root server (`server.js`), change `package.json` scripts to point to it.
 
 ## License
 
@@ -290,7 +181,5 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## Acknowledgements
 
-- [Spotify Web API](https://developer.spotify.com/documentation/web-api/)
-- [Spotify Web Playback SDK](https://developer.spotify.com/documentation/web-playback-sdk/)
 - [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 - [OpenAI Responses + TTS](https://platform.openai.com/docs)

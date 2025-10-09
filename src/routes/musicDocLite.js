@@ -16,7 +16,7 @@ router.post('/api/music-doc-lite', async (req, res) => {
       return res.status(400).json({ error: 'Missing required field: topic (string)' });
     }
 
-    // Directly generate using LLM (no Spotify catalog)
+    // Directly generate using LLM
     const data = await generateMusicDoc({
       topic,
       prompt,

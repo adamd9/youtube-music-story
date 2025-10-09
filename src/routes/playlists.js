@@ -5,7 +5,7 @@ const { getInitialPlaylist } = require('../services/initialPlaylist');
 const { dbg, truncate } = require('../utils/logger');
 
 // Create/save a generated playlist record
-// body: { ownerId: string, title: string, topic: string, summary: string, timeline: array, source?: 'spotify'|'youtube' }
+// body: { ownerId: string, title: string, topic: string, summary: string, timeline: array, source?: 'youtube' }
 router.post('/api/playlists', async (req, res) => {
   try {
     const { ownerId, title, topic, summary, timeline, source } = req.body || {};
