@@ -4,7 +4,7 @@ const config = require('../config');
 const { generateMusicDoc } = require('../services/musicDoc');
 const { dbg } = require('../utils/logger');
 
-// Lightweight documentary generation without Spotify requirements.
+// Lightweight documentary generation (YouTube-only app).
 // Body: { topic: string, prompt?: string, narrationTargetSecs?: number }
 router.post('/api/music-doc-lite', async (req, res) => {
   try {
@@ -16,7 +16,7 @@ router.post('/api/music-doc-lite', async (req, res) => {
       return res.status(400).json({ error: 'Missing required field: topic (string)' });
     }
 
-    // Directly generate using LLM without any Spotify catalog
+    // Directly generate using LLM (no Spotify catalog)
     const data = await generateMusicDoc({
       topic,
       prompt,

@@ -13,6 +13,6 @@ Additional rules:
 - **Narration titles**: EVERY narration segment MUST include a `title` field with a short, descriptive title (3-6 words) that captures the essence of that segment. Examples: "Introduction: The Early Years", "Breakthrough Moment", "Studio Innovation", "Cultural Impact", "Legacy and Influence". These titles will be displayed in the playlist UI.
 - Per-song lead-ins: before EACH song, include a narration segment that (a) introduces the song about to play by title and year, and (b) provides concise historical context about the band and the moment around that release (context, influences, impact, scene, or production).
 - Respect any timing target specified in the user instructions by adjusting sentence count as needed.
-- Each song should be suitable to search on Spotify via a helpful `spotify_query` string such as "Song Title artist:Band Name". Prefer including `track_id` and `track_uri` if known or when selecting from a provided catalog.
-- If a track catalog is provided by the user (described in the user input), you MUST pick all 5 songs ONLY from that catalog and include the exact `track_id` and `track_uri` for those selections.
+- For each song, include accurate `title` and `artist`. Optionally include a short `youtube_hint` string that would help a YouTube search (e.g., year, version, or disambiguation notes).
+- If a track catalog is provided by the user (described in the user input), you MUST pick all 5 songs ONLY from that catalog.
 - Ensure the timeline intersperses narration and songs like a music documentary and contains exactly 5 song items (narration-song pairs plus an opening narration, i.e., at least 6 narration segments total including intro and inter-song lead-ins).

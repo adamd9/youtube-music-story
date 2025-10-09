@@ -37,9 +37,7 @@ async function generateMusicDoc({ topic, prompt, catalog }) {
             artist: { type: 'string' },
             album: { type: 'string' },
             year: { type: 'string' },
-            spotify_query: { type: 'string' },
-            track_id: { type: 'string' },
-            track_uri: { type: 'string' }
+            youtube_hint: { type: 'string' }
           },
           required: ['type']
         }
@@ -56,9 +54,9 @@ async function generateMusicDoc({ topic, prompt, catalog }) {
     '- The JSON MUST strictly conform to the following JSON Schema (names and types must match exactly). Use a single interleaved array named "timeline" whose items are narration or song objects:',
     schemaStr,
     'Additional rules:',
-    '- Each song should be suitable to search on Spotify via a helpful spotify_query string such as "Song Title artist:Band Name". Prefer including track_id and track_uri if known or when selecting from a provided catalog.',
+    '- For each song, include accurate title and artist. Optionally include a short youtube_hint string that would help a YouTube search (e.g., year, version, or disambiguation notes).',
     '- Narration should be broken into short, TTS-friendly segments (2-5 sentences each), and reference the songs where relevant.',
-    '- If a track catalog is provided by the user (described in the user input), you MUST pick all 5 songs ONLY from that catalog and include the exact track_id and track_uri for those selections.',
+    '- If a track catalog is provided by the user (described in the user input), you MUST pick all 5 songs ONLY from that catalog.',
     '- Ensure the timeline intersperses narration and songs like a music documentary and contains exactly 5 song items.'
   ].join('\n');
 
@@ -67,11 +65,11 @@ async function generateMusicDoc({ topic, prompt, catalog }) {
     : '';
   let catalogNote = '';
   if (Array.isArray(catalog) && catalog.length > 0) {
-    const trimmed = catalog.map(t => ({ id: t.id, uri: t.uri, name: t.name, artist: t.artist, album: t.album, release_date: t.release_date, duration_ms: t.duration_ms })).slice(0, 500);
+    const trimmed = catalog.map(t => ({ name: t.name, artist: t.artist, album: t.album, release_date: t.release_date, duration_ms: t.duration_ms })).slice(0, 500);
     catalogNote = `\n\nCandidate track catalog (MUST choose ONLY from these if selecting songs):\n${JSON.stringify(trimmed, null, 2)}`;
   }
 
-  const userPrompt = `Topic: ${topic}\n\nGoals:\n- Provide a brief summary.\n- Pick exactly 5 songs that represent the topic narrative.\n- Create narration segments that reference songs and can be placed between songs.\n- Build a single interleaved timeline array mixing narration and songs.\n- If a catalog is provided, select songs only from it and include track_id and track_uri.\n\nIMPORTANT: Return ONLY a single raw JSON object that validates against the provided JSON Schema. Do NOT include any extra commentary or formatting.\n${extra}${catalogNote}`;
+  const userPrompt = `Topic: ${topic}\n\nGoals:\n- Provide a brief summary.\n- Pick exactly 5 songs that represent the topic narrative.\n- Create narration segments that reference songs and can be placed between songs.\n- Build a single interleaved timeline array mixing narration and songs.\n- If a catalog is provided, select songs only from it.\n\nIMPORTANT: Return ONLY a single raw JSON object that validates against the provided JSON Schema. Do NOT include any extra commentary or formatting.\n${extra}${catalogNote}`;
 
   dbg('music-doc: request', {
     model: 'gpt-5-mini',

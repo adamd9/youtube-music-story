@@ -25,8 +25,8 @@ Timing preference (strictly follow):
 - Aim within ±10% of the target per segment; split or tighten phrasing as needed while preserving clarity and chronology.
 
 Catalog rules:
-- If a catalog is provided, select songs ONLY from it and include exact `track_id` and `track_uri`.
-- For each song, include a helpful `spotify_query` such as "Song Title artist:Band Name".
+- If a catalog is provided, select songs ONLY from it.
+- For each song, include accurate `title` and `artist`. Optionally include a concise `youtube_hint` that could help find the correct video (e.g., year, version, or disambiguation notes).
 
 {{EXTRA}}
 

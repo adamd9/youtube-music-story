@@ -1,5 +1,5 @@
 {
-  "name": "spotify-mp3-player",
+  "name": "music-story-youtube",
   "version": "1.0.0",
   "description": "",
   "main": "src/server.js",
@@ -16,7 +16,6 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "request": "^2.88.2",
-    "spotify-web-api-js": "^1.5.2",
     "openai": "^4.56.0"
   },
   "devDependencies": {

@@ -20,11 +20,6 @@ const config = {
   clientDebug: process.env.CLIENT_DEBUG === '1' || process.env.DEBUG === '1',
   serverDebug: process.env.SERVER_DEBUG === '1' || process.env.DEBUG === '1',
   initialPlaylistId: (process.env.INITIAL_PLAYLIST_ID || '').trim(),
-  spotify: {
-    clientId: process.env.CLIENT_ID,
-    clientSecret: process.env.CLIENT_SECRET,
-    // redirectUri is dynamically calculated per request
-  },
   youtube: {
     apiKey: process.env.YOUTUBE_API_KEY || '',
   },

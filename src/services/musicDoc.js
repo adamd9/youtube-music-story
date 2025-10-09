@@ -26,9 +26,7 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
             artist: { type: 'string' },
             album: { type: 'string' },
             year: { type: 'string' },
-            spotify_query: { type: 'string' },
-            track_id: { type: 'string' },
-            track_uri: { type: 'string' }
+            youtube_hint: { type: 'string' }
           },
           required: ['type']
         }
@@ -47,8 +45,8 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
     : '';
   let catalogNote = '';
   if (Array.isArray(catalog) && catalog.length > 0) {
-    const trimmed = catalog.map(t => ({ id: t.id, uri: t.uri, name: t.name, artist: t.artist, album: t.album, release_date: t.release_date, duration_ms: t.duration_ms })).slice(0, 500);
-    catalogNote = `\n\nCandidate track catalog (MUST choose ONLY from these if selecting songs):\n${JSON.stringify(trimmed, null, 2)}`;
+    const trimmed = catalog.map(t => ({ name: t.name, artist: t.artist, album: t.album, release_date: t.release_date, duration_ms: t.duration_ms })).slice(0, 500);
+    catalogNote = `\n\nCandidate track catalog (choose ONLY from these if selecting songs):\n${JSON.stringify(trimmed, null, 2)}`;
   }
 
   const targetSecs = Number.isFinite(narrationTargetSecs) && narrationTargetSecs > 0 ? Math.floor(narrationTargetSecs) : 30;
