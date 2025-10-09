@@ -1,3 +1,18 @@
+// Keep external YouTube link in sync with the selected/playing track
+function updateYouTubeLinkForTrack(track) {
+    try {
+        if (!openYouTubeBtn || !ytLinkHint) return;
+        if (track && track.type === 'youtube' && track.youtube && track.youtube.videoId) {
+            openYouTubeBtn.href = `https://www.youtube.com/watch?v=${track.youtube.videoId}`;
+            openYouTubeBtn.style.display = 'inline-block';
+            ytLinkHint.style.display = 'none';
+        } else {
+            openYouTubeBtn.style.display = 'none';
+            ytLinkHint.style.display = 'inline-block';
+        }
+    } catch {}
+}
+
 // Debug toggle via env-configured flag injected by the server at /config.js
 // Set CLIENT_DEBUG=1 in your server env to enable verbose logging in the client.
 const DEBUG = (() => {
@@ -31,6 +46,8 @@ async function playYouTubeTrack(track) {
             state.ytPlayer.loadVideoById({ videoId: track.youtube.videoId, startSeconds });
             state.ytPlayer.playVideo();
             state.isPlaying = true;
+            // Update external link button
+            updateYouTubeLinkForTrack(track);
             // Duration from mapping if available
             if (Number.isFinite(track.youtube.durationSec)) {
                 state.duration = track.youtube.durationSec * 1000;
@@ -44,6 +61,7 @@ async function playYouTubeTrack(track) {
             }
         } else {
             showError('No YouTube mapping for this track');
+            updateYouTubeLinkForTrack(null);
         }
 
         updatePlayPauseButton();
@@ -89,6 +107,10 @@ async function mapYouTubeForCurrentPlaylist() {
                     type: 'youtube',
                     youtube: m.youtube
                 };
+                // If this mapped entry is the current track, update the external link
+                if (idx === state.currentTrackIndex) {
+                    updateYouTubeLinkForTrack(state.playlist[idx]);
+                }
             }
         }
         renderPlaylist();
@@ -187,6 +209,16 @@ function showEmptyState(message) {
 }
 
 const dbg = (...args) => { if (DEBUG) console.log('[DBG]', ...args); };
+
+// Explicit mode logger for quick diagnostics
+function logMode(context) {
+    try {
+        const m = state && state.mode ? String(state.mode) : '(unset)';
+        console.log(`[MODE] ${context || 'info'}:`, m);
+    } catch (e) {
+        // no-op
+    }
+}
 
 // My Playlists rendering and actions
 async function refreshMyPlaylists() {
@@ -554,12 +586,12 @@ const customRedirectUriInput = document.getElementById('custom-redirect-uri');
 const saveCredentialsBtn = document.getElementById('save-credentials-btn');
 const clearCredentialsBtn = document.getElementById('clear-credentials-btn');
 const openSettingsFromDenied = document.getElementById('open-settings-from-denied');
-// After DOM elements are bound, apply mode layout visibility
-applyModeLayoutVisibility();
 // Mode toggle and YouTube elements
 const modeSelect = document.getElementById('mode-select');
 const ytPlayerContainer = document.getElementById('yt-player-container');
 const ytPlayerHost = document.getElementById('youtube-player');
+const openYouTubeBtn = document.getElementById('open-youtube-btn');
+const ytLinkHint = document.getElementById('yt-link-hint');
 
 // Built-in default album art (inline SVG, dark gray square with music note)
 const DEFAULT_ALBUM_ART = 'data:image/svg+xml;utf8,\
@@ -602,11 +634,17 @@ function applyModeToUI(mode) {
         }
     } catch {}
     // Keep YouTube container visible
+    try {
+        // Default: hide external link until a video is available
+        if (openYouTubeBtn) openYouTubeBtn.style.display = 'none';
+        if (ytLinkHint) ytLinkHint.style.display = 'inline-block';
+    } catch {}
 }
 
 function applyModeLayoutVisibility() {
     try {
         const loginNote = document.querySelector('#login .note');
+        logMode('applyLayout');
         if (state.mode === 'youtube') {
             if (loginNote) loginNote.textContent = 'YouTube mode: Spotify login not required.';
             if (playerSection) playerSection.classList.remove('hidden');
@@ -623,7 +661,10 @@ function applyModeLayoutVisibility() {
 
 // Initialize mode early (UI application will occur after DOM elements are bound)
 state.mode = getInitialMode();
+logMode('startup');
 applyModeToUI(state.mode);
+// Apply layout now that mode is set
+applyModeLayoutVisibility();
 
 // Ensure transport buttons work in all modes (including YouTube where Spotify SDK isn't initialized)
 if (!state.uiBound) {
@@ -702,15 +743,28 @@ function buildPlaylistFromDoc(doc) {
                     const title = entry.title || '';
                     const artist = entry.artist || '';
                     const uri = entry.track_uri || null;
-                    newPlaylist.push({
-                        type: 'spotify',
-                        id: uri || null,
-                        name: title,
-                        artist: artist,
-                        albumArt: '',
-                        duration: 0,
-                        spotifyQuery: entry.spotify_query || `${title} artist:${artist}`
-                    });
+                    // If pre-mapped YouTube video is present, prefer YouTube immediately in YouTube mode
+                    if (entry.youtube && entry.youtube.videoId) {
+                        newPlaylist.push({
+                            type: 'youtube',
+                            id: `youtube:${entry.youtube.videoId}`,
+                            name: title,
+                            artist: artist,
+                            albumArt: '',
+                            duration: Number.isFinite(entry.youtube.durationSec) ? entry.youtube.durationSec * 1000 : 0,
+                            youtube: entry.youtube
+                        });
+                    } else {
+                        newPlaylist.push({
+                            type: 'spotify',
+                            id: uri || null,
+                            name: title,
+                            artist: artist,
+                            albumArt: '',
+                            duration: 0,
+                            spotifyQuery: entry.spotify_query || `${title} artist:${artist}`
+                        });
+                    }
                 }
             });
         } else if (doc && Array.isArray(doc.structure) && Array.isArray(doc.tracks) && Array.isArray(doc.narration_segments)) {
@@ -775,9 +829,19 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
-        // If YouTube mode, map songs to YouTube video IDs
+        // If YouTube mode, map songs to YouTube video IDs for any remaining Spotify items
         if (state.mode === 'youtube') {
             mapYouTubeForCurrentPlaylist().catch(err => console.error('YouTube mapping error', err));
+            // If first track is already a YouTube item, update the external link immediately
+            try {
+                if (state.currentTrack && state.currentTrack.type === 'youtube' && state.currentTrack.youtube && state.currentTrack.youtube.videoId) {
+                    if (openYouTubeBtn) {
+                        openYouTubeBtn.href = `https://www.youtube.com/watch?v=${state.currentTrack.youtube.videoId}`;
+                        openYouTubeBtn.style.display = 'inline-block';
+                    }
+                    if (ytLinkHint) ytLinkHint.style.display = 'none';
+                }
+            } catch {}
         }
 
     } catch (e) {
@@ -1165,6 +1229,9 @@ async function playTrack(index) {
     state.isSpotifyTrack = state.currentTrack.type === 'spotify';
     state.startedTrackIndex = index;
     dbg('playTrack', { index, isSpotify: state.isSpotifyTrack, track: state.currentTrack });
+    logMode('playTrack');
+    // Keep external YouTube link in sync with the selected item
+    updateYouTubeLinkForTrack(state.currentTrack);
     
     // Update UI
     updateNowPlaying({
@@ -1178,7 +1245,25 @@ async function playTrack(index) {
     
     // Play the track based on its type
     if (state.currentTrack.type === 'spotify') {
-        await playSpotifyTrack(state.currentTrack);
+        // In YouTube mode, never call Spotify APIs. Attempt to play via mapped YouTube video.
+        if (state.mode === 'youtube') {
+            // If the current item is already mapped to YouTube, play it
+            const mapped = state.playlist[state.currentTrackIndex];
+            if (mapped && mapped.type === 'youtube') {
+                await playYouTubeTrack(mapped);
+            } else {
+                // Kick off mapping and try again if mapping succeeds
+                try { await mapYouTubeForCurrentPlaylist(); } catch {}
+                const after = state.playlist[state.currentTrackIndex];
+                if (after && after.type === 'youtube') {
+                    await playYouTubeTrack(after);
+                } else {
+                    showError('Track not yet mapped to YouTube. Please try again in a moment.');
+                }
+            }
+        } else {
+            await playSpotifyTrack(state.currentTrack);
+        }
     } else if (state.currentTrack.type === 'mp3') {
         await playLocalMP3(state.currentTrack);
     } else if (state.currentTrack.type === 'youtube') {
@@ -1205,6 +1290,17 @@ async function playSpotifyTrack(track) {
             try { narrationAudio.pause(); } catch (_) {}
         }
         state.isSpotifyTrack = true;
+        // Do not allow Spotify calls in YouTube mode or without an access token
+        if (state.mode === 'youtube') {
+            dbg('blocked Spotify playback in YouTube mode');
+            showError('This track will play via YouTube in YouTube mode.');
+            return;
+        }
+        if (!state.accessToken) {
+            dbg('no Spotify access token; blocking Spotify API call');
+            showError('Spotify login required to play this track.');
+            return;
+        }
         
         // Resolve track URI via Spotify Search if not provided
         let trackUri = track.id && track.id.startsWith('spotify:track:') ? track.id : null;
