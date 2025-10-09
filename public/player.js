@@ -672,26 +672,29 @@ if (!state.uiBound) {
 
 // Mode selector disabled (hidden) while Spotify is off
 
-// YouTube IFrame API init (global callback)
-window.onYouTubeIframeAPIReady = function() {
+// Robust YouTube init with retries (handles API arriving before/after our script)
+let ytInitAttempts = 0;
+async function ensureYouTubePlayerReady() {
     try {
-        if (!ytPlayerHost || state.ytPlayer) return;
+        if (state.ytPlayer) return true;
+        if (!ytPlayerHost) return false; // DOM not ready
+        if (typeof YT === 'undefined' || !YT || !YT.Player) {
+            // Retry a few times briefly
+            if (ytInitAttempts++ < 10) {
+                return await new Promise(res => setTimeout(() => res(ensureYouTubePlayerReady()), 150));
+            }
+            return false;
+        }
         state.ytPlayer = new YT.Player('youtube-player', {
             height: '225',
             width: '400',
-            videoId: '', // none initially
-            playerVars: {
-                autoplay: 0,
-                controls: 1,
-                rel: 0,
-                modestbranding: 1
-            },
+            videoId: '',
+            playerVars: { autoplay: 0, controls: 1, rel: 0, modestbranding: 1, playsinline: 1 },
             events: {
-                onReady: (ev) => { dbg('YouTube player ready'); },
+                onReady: () => { dbg('YouTube player ready'); },
                 onStateChange: (ev) => {
                     if (!ev || typeof YT === 'undefined') return;
                     if (ev.data === YT.PlayerState.ENDED) {
-                        // Advance only when we're currently on a youtube track
                         if (state.currentTrack && state.currentTrack.type === 'youtube') {
                             playNext();
                         }
@@ -700,9 +703,16 @@ window.onYouTubeIframeAPIReady = function() {
             }
         });
         dbg('YouTube IFrame API initialized');
+        return true;
     } catch (e) {
         console.error('YouTube init error', e);
+        return false;
     }
+}
+
+// YouTube IFrame API init (global callback)
+window.onYouTubeIframeAPIReady = function() {
+    ensureYouTubePlayerReady();
 };
 
 // Build playlist from documentary JSON (supports both legacy structure + new timeline)
