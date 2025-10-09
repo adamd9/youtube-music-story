@@ -75,7 +75,13 @@
 
         <div id="player">
             <div class="now-playing">
-                <img id="album-art" src="" alt="Album Art" class="album-art">
+                <div class="visual">
+                    <!-- YouTube player sits in the visual slot and replaces album art when a YouTube track is active -->
+                    <div id="yt-player-container" class="album-art" style="margin:0;">
+                        <div id="youtube-player"></div>
+                    </div>
+                    <img id="album-art" src="" alt="Album Art" class="album-art">
+                </div>
                 <div class="track-info">
                     <div class="track-title-row">
                         <h2 id="track-name">Not Playing</h2>
@@ -100,14 +106,6 @@
 
             <!-- Hidden audio element for narration/local MP3 playback (iOS-friendly) -->
             <audio id="narration-audio" preload="metadata" playsinline></audio>
-            <!-- Visible YouTube player container (kept visible initially for debugging) -->
-            <div id="yt-player-container" style="margin:8px 0;">
-                <div id="youtube-player"></div>
-                <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
-                    <a id="open-youtube-btn" class="btn btn-secondary" href="#" target="_blank" rel="noopener" style="display:none;">Open on YouTube ↗</a>
-                    <span id="yt-link-hint" class="note" style="display:none;">No mapped video yet</span>
-                </div>
-            </div>
 
             <div class="volume-control">
                 <span>🔈</span>

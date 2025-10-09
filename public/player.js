@@ -1,15 +1,12 @@
-// Keep external YouTube link in sync with the selected/playing track
-function updateYouTubeLinkForTrack(track) {
+// No-op: external link removed from UI
+function updateYouTubeLinkForTrack(_track) { /* removed external link */ }
+
+// Visual switcher: show YouTube player instead of album art for YouTube tracks
+function updateVisualForTrack(track) {
     try {
-        if (!openYouTubeBtn || !ytLinkHint) return;
-        if (track && track.type === 'youtube' && track.youtube && track.youtube.videoId) {
-            openYouTubeBtn.href = `https://www.youtube.com/watch?v=${track.youtube.videoId}`;
-            openYouTubeBtn.style.display = 'inline-block';
-            ytLinkHint.style.display = 'none';
-        } else {
-            openYouTubeBtn.style.display = 'none';
-            ytLinkHint.style.display = 'inline-block';
-        }
+        const isYT = !!(track && track.type === 'youtube');
+        if (ytPlayerContainer) ytPlayerContainer.style.display = isYT ? 'block' : 'none';
+        if (albumArtElement) albumArtElement.style.display = isYT ? 'none' : 'block';
     } catch {}
 }
 
@@ -48,6 +45,7 @@ async function playYouTubeTrack(track) {
             state.isPlaying = true;
             // Update external link button
             updateYouTubeLinkForTrack(track);
+            updateVisualForTrack(track);
             // Duration from mapping if available
             if (Number.isFinite(track.youtube.durationSec)) {
                 state.duration = track.youtube.durationSec * 1000;
@@ -62,6 +60,7 @@ async function playYouTubeTrack(track) {
         } else {
             showError('No YouTube mapping for this track');
             updateYouTubeLinkForTrack(null);
+            updateVisualForTrack(null);
         }
 
         updatePlayPauseButton();
@@ -110,6 +109,7 @@ async function mapYouTubeForCurrentPlaylist() {
                 // If this mapped entry is the current track, update the external link
                 if (idx === state.currentTrackIndex) {
                     updateYouTubeLinkForTrack(state.playlist[idx]);
+                    updateVisualForTrack(state.playlist[idx]);
                 }
             }
         }
@@ -633,12 +633,8 @@ function applyModeToUI(mode) {
             const p = modeSelect.parentElement; if (p) p.classList.add('hidden');
         }
     } catch {}
-    // Keep YouTube container visible
-    try {
-        // Default: hide external link until a video is available
-        if (openYouTubeBtn) openYouTubeBtn.style.display = 'none';
-        if (ytLinkHint) ytLinkHint.style.display = 'inline-block';
-    } catch {}
+    // Default: hide YouTube player visual until a YouTube track is active
+    try { if (ytPlayerContainer) ytPlayerContainer.style.display = 'none'; } catch {}
 }
 
 function applyModeLayoutVisibility() {
@@ -1232,6 +1228,7 @@ async function playTrack(index) {
     logMode('playTrack');
     // Keep external YouTube link in sync with the selected item
     updateYouTubeLinkForTrack(state.currentTrack);
+    updateVisualForTrack(state.currentTrack);
     
     // Update UI
     updateNowPlaying({
@@ -1446,23 +1443,41 @@ async function playLocalMP3(track) {
 function togglePlayPause() {
     if (!state.currentTrack) return;
     
-    if (state.isPlaying) {
-        if (state.isSpotifyTrack) {
+    // Handle by track type
+    if (state.currentTrack.type === 'youtube') {
+        if (!state.ytPlayer || typeof state.ytPlayer.playVideo !== 'function' || typeof state.ytPlayer.pauseVideo !== 'function') {
+            showError('YouTube player not ready.');
+            return;
+        }
+        if (state.isPlaying) {
+            dbg('toggle pause: YouTube');
+            try { state.ytPlayer.pauseVideo(); } catch {}
+            state.isPlaying = false;
+        } else {
+            dbg('toggle resume: YouTube');
+            try { state.ytPlayer.playVideo(); } catch {}
+            state.isPlaying = true;
+        }
+    } else if (state.isSpotifyTrack) {
+        if (state.isPlaying) {
             dbg('toggle pause: Spotify');
             state.spotifyPlayer.pause();
-        } else if (narrationAudio) {
-            // Pause local audio element
-            dbg('toggle pause: local MP3 (element)');
-            narrationAudio.pause();
-            state.audioPauseTime = Date.now();
-        }
-        state.isPlaying = false;
-    } else {
-        if (state.isSpotifyTrack) {
+            state.isPlaying = false;
+        } else {
             dbg('toggle resume: Spotify');
             state.spotifyPlayer.resume();
+            state.isPlaying = true;
+        }
+    } else {
+        // Local MP3 (narration)
+        if (state.isPlaying) {
+            if (narrationAudio) {
+                dbg('toggle pause: local MP3 (element)');
+                narrationAudio.pause();
+                state.audioPauseTime = Date.now();
+            }
+            state.isPlaying = false;
         } else {
-            // Resume local audio element
             if (narrationAudio && narrationAudio.src) {
                 dbg('toggle resume: local MP3 (element)');
                 narrationAudio.play();
@@ -1470,8 +1485,8 @@ function togglePlayPause() {
                 // No src set yet, start fresh
                 playLocalMP3(state.currentTrack);
             }
+            state.isPlaying = true;
         }
-        state.isPlaying = true;
     }
     
     updatePlayPauseButton();
