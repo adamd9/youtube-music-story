@@ -24,14 +24,10 @@ const DEBUG = (() => {
 // Play a YouTube track
 async function playYouTubeTrack(track) {
     try {
-        // Pause Spotify and local audio
-        if (state.spotifyPlayer) {
-            try { state.spotifyPlayer.pause(); } catch (_) {}
-        }
+        // Pause local audio
         if (narrationAudio) {
             try { narrationAudio.pause(); } catch (_) {}
         }
-        state.isSpotifyTrack = false;
 
         if (!state.ytPlayer || typeof state.ytPlayer.loadVideoById !== 'function') {
             showError('YouTube player not ready. Ensure the IFrame API loaded.');
@@ -222,55 +218,28 @@ function logMode(context) {
 
 // My Playlists rendering and actions
 async function refreshMyPlaylists() {
-    const ownerId = (state.mode === 'youtube') ? 'anonymous' : await fetchSpotifyUserId();
-    dbg('refreshMyPlaylists: owner', ownerId, 'mode', state.mode);
-    if (!ownerId) {
-        if (myPlaylistsEmpty) myPlaylistsEmpty.textContent = 'Login required to view saved playlists.';
-        return;
-    }
+    const ownerId = 'anonymous';
+    dbg('refreshMyPlaylists: owner', ownerId);
     try {
         // Fetch both completed playlists and active jobs
-        const [playlistsResp, jobsResp] = await Promise.all([
-            fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`),
-            state.mode === 'youtube' ? Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) }) : fetch(`/api/users/${encodeURIComponent(ownerId)}/jobs`)
+        const [playlistsResp] = await Promise.all([
+            fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`)
         ]);
         
         const playlistsJson = playlistsResp.ok ? await playlistsResp.json() : { playlists: [] };
-        const jobsJson = jobsResp.ok ? await jobsResp.json() : { jobs: [] };
-        
         const playlists = Array.isArray(playlistsJson?.playlists) ? playlistsJson.playlists : [];
-        const jobs = Array.isArray(jobsJson?.jobs) ? jobsJson.jobs : [];
-        dbg('refreshMyPlaylists: fetched', { playlists: playlists.length, jobs: jobs.length });
-        
-        // Filter active jobs (pending or running)
-        const activeJobs = jobs.filter(j => j.status === 'pending' || j.status === 'running');
+        dbg('refreshMyPlaylists: fetched', { playlists: playlists.length });
         
         if (myPlaylistsList) myPlaylistsList.innerHTML = '';
         
-        if (!playlists.length && !activeJobs.length) {
+        if (!playlists.length) {
             if (myPlaylistsEmpty) myPlaylistsEmpty.classList.remove('hidden');
             return;
         }
         
         if (myPlaylistsEmpty) myPlaylistsEmpty.classList.add('hidden');
         
-        // Show active jobs first (Spotify mode only)
-        activeJobs.forEach(job => {
-            const li = document.createElement('li');
-            const topic = job.params?.topic || '(generating)';
-            const statusBadge = job.status === 'running' 
-                ? `<span class="badge badge-running">⏳ ${Math.round(job.progress || 0)}%</span>`
-                : `<span class="badge badge-pending">⏸ Queued</span>`;
-            
-            li.innerHTML = `
-                <div class="saved-item job-item">
-                    <button class="saved-title job-link" data-job-id="${job.id}" title="Reconnect to job">
-                        ${topic} ${statusBadge}
-                        <span class="saved-meta job-status">${job.stageLabel || 'Starting...'}</span>
-                    </button>
-                </div>`;
-            myPlaylistsList.appendChild(li);
-        });
+        // No jobs shown in YouTube-only mode
         
         // Show completed playlists
         playlists.forEach(rec => {
@@ -404,13 +373,11 @@ async function generateTTSForDoc(doc, playlistId) {
     }
 }
 
-// Player state
+// Player state (YouTube-only)
 const state = {
-    spotifyPlayer: null,
     audioContext: null,
     audioSource: null,
     gainNode: null,
-    sdkReady: false,
     currentTrack: null,
     isPlaying: false,
     currentTime: 0,
@@ -418,41 +385,19 @@ const state = {
     volume: 0.5,
     playlist: [],
     currentTrackIndex: 0,
-    isSpotifyTrack: true,
-    // Global playback mode: 'spotify' | 'youtube'
-    mode: 'spotify',
     // YouTube IFrame Player instance (when initialized)
     ytPlayer: null,
-    accessToken: null,
-    deviceId: null,
     isInitialized: false,
-    isAdPlaying: false,
     isGeneratingDoc: false,
     startedTrackIndex: -1,
     loadedPlaylistId: null,
     lastDoc: null,
     // Section clip control (seconds)
     sectionClipSeconds: 30,
-    // Internal timing for Spotify clip limiting
-    spotifyClipTimeoutId: null,
-    spotifyClipStartTime: 0,
-    spotifyClipPlayedMs: 0,
-    // Track if access denied overlay has been shown
-    accessDeniedShown: false,
     uiBound: false
 };
 
-// Custom Credentials Management
-const CUSTOM_CREDS_KEY = 'spotify_custom_credentials';
-
-function getCustomCredentials() {
-    try {
-        const stored = localStorage.getItem(CUSTOM_CREDS_KEY);
-        return stored ? JSON.parse(stored) : null;
-    } catch {
-        return null;
-    }
-}
+// No credentials management in YouTube-only mode
 
 function saveCustomCredentials(clientId, clientSecret) {
     const creds = { clientId, clientSecret };
@@ -470,12 +415,7 @@ function hasCustomCredentials() {
 }
 
 // Get redirect URI (always /callback on current origin)
-function getRedirectUri() {
-    let origin = window.location.origin;
-    // Spotify requires 127.0.0.1 instead of localhost
-    origin = origin.replace('localhost', '127.0.0.1');
-    return origin + '/callback';
-}
+// No redirect URI (Spotify removed)
 
 // Get active credentials (custom or default from server)
 async function getActiveCredentials() {
@@ -624,35 +564,13 @@ function persistMode(mode) {
         window.history.replaceState({}, '', url.toString());
     } catch {}
 }
-function applyModeToUI(mode) {
-    try {
-        if (modeSelect) {
-            modeSelect.value = mode;
-            // Hide the mode selector from UI while Spotify is disabled
-            modeSelect.classList.add('hidden');
-            const p = modeSelect.parentElement; if (p) p.classList.add('hidden');
-        }
-    } catch {}
+function applyModeToUI() {
     // Default: hide YouTube player visual until a YouTube track is active
     try { if (ytPlayerContainer) ytPlayerContainer.style.display = 'none'; } catch {}
 }
 
 function applyModeLayoutVisibility() {
-    try {
-        const loginNote = document.querySelector('#login .note');
-        logMode('applyLayout');
-        if (state.mode === 'youtube') {
-            if (loginNote) loginNote.textContent = 'YouTube mode: Spotify login not required.';
-            if (playerSection) playerSection.classList.remove('hidden');
-            if (loginSection) loginSection.classList.add('hidden');
-        } else {
-            if (loginNote) loginNote.textContent = 'You need a Spotify Premium account to use this player';
-            if (!state.accessToken) {
-                if (playerSection) playerSection.classList.add('hidden');
-                if (loginSection) loginSection.classList.remove('hidden');
-            }
-        }
-    } catch {}
+    try { if (playerSection) playerSection.classList.remove('hidden'); } catch {}
 }
 
 // Initialize mode early (UI application will occur after DOM elements are bound)
@@ -670,7 +588,7 @@ if (!state.uiBound) {
     state.uiBound = true;
 }
 
-// Mode selector disabled (hidden) while Spotify is off
+// Mode selector removed (YouTube-only)
 
 // Robust YouTube init with retries (handles API arriving before/after our script)
 let ytInitAttempts = 0;
@@ -761,14 +679,15 @@ function buildPlaylistFromDoc(doc) {
                             youtube: entry.youtube
                         });
                     } else {
+                        // Create a placeholder YouTube item; mapping will fill youtube field
                         newPlaylist.push({
-                            type: 'spotify',
-                            id: uri || null,
+                            type: 'youtube',
+                            id: null,
                             name: title,
                             artist: artist,
                             albumArt: '',
                             duration: 0,
-                            spotifyQuery: entry.spotify_query || `${title} artist:${artist}`
+                            youtube: null
                         });
                     }
                 }
@@ -802,13 +721,13 @@ function buildPlaylistFromDoc(doc) {
                     const searchArtist = tr.artist || '';
                     const trackUri = tr.track_uri || null;
                     newPlaylist.push({
-                        type: 'spotify',
-                        id: trackUri || null,
+                        type: 'youtube',
+                        id: null,
                         name: searchName,
                         artist: searchArtist,
                         albumArt: '',
                         duration: 0,
-                        spotifyQuery: tr.spotify_query || `${searchName} artist:${searchArtist}`
+                        youtube: null
                     });
                 }
             });
@@ -821,7 +740,6 @@ function buildPlaylistFromDoc(doc) {
         state.playlist = newPlaylist;
         state.currentTrackIndex = 0;
         state.currentTrack = state.playlist[0];
-        state.isSpotifyTrack = state.currentTrack.type === 'spotify';
         state.startedTrackIndex = -1; // nothing played yet
         renderPlaylist();
         setPlayerSectionsVisible(true);
@@ -835,20 +753,8 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
-        // If YouTube mode, map songs to YouTube video IDs for any remaining Spotify items
-        if (state.mode === 'youtube') {
-            mapYouTubeForCurrentPlaylist().catch(err => console.error('YouTube mapping error', err));
-            // If first track is already a YouTube item, update the external link immediately
-            try {
-                if (state.currentTrack && state.currentTrack.type === 'youtube' && state.currentTrack.youtube && state.currentTrack.youtube.videoId) {
-                    if (openYouTubeBtn) {
-                        openYouTubeBtn.href = `https://www.youtube.com/watch?v=${state.currentTrack.youtube.videoId}`;
-                        openYouTubeBtn.style.display = 'inline-block';
-                    }
-                    if (ytLinkHint) ytLinkHint.style.display = 'none';
-                }
-            } catch {}
-        }
+        // Always map songs to YouTube video IDs
+        mapYouTubeForCurrentPlaylist().catch(err => console.error('YouTube mapping error', err));
 
     } catch (e) {
         console.error('Failed to build playlist from doc:', e);
@@ -856,18 +762,8 @@ function buildPlaylistFromDoc(doc) {
     }
 }
 
-// Initialize the player when the window loads
-window.onSpotifyWebPlaybackSDKReady = () => {
-    // This function will be called by the Spotify Web Playback SDK when it's ready
-    console.log('Spotify Web Playback SDK ready');
-    dbg('SDK ready');
-    state.sdkReady = true;
-    // If we already have a token in the URL, initialize now
-    if (state.accessToken && !state.isInitialized) {
-        initPlayer();
-    }
-};
-
+// Remove activeJobs UI block
+// UI Event Listeners
 // Parse URL hash to get access token
 async function parseHash() {
     const hash = window.location.hash.substring(1);
@@ -1232,7 +1128,6 @@ async function playTrack(index) {
 
     state.currentTrackIndex = index;
     state.currentTrack = state.playlist[index];
-    state.isSpotifyTrack = state.currentTrack.type === 'spotify';
     state.startedTrackIndex = index;
     dbg('playTrack', { index, isSpotify: state.isSpotifyTrack, track: state.currentTrack });
     logMode('playTrack');
@@ -1466,16 +1361,6 @@ function togglePlayPause() {
         } else {
             dbg('toggle resume: YouTube');
             try { state.ytPlayer.playVideo(); } catch {}
-            state.isPlaying = true;
-        }
-    } else if (state.isSpotifyTrack) {
-        if (state.isPlaying) {
-            dbg('toggle pause: Spotify');
-            state.spotifyPlayer.pause();
-            state.isPlaying = false;
-        } else {
-            dbg('toggle resume: Spotify');
-            state.spotifyPlayer.resume();
             state.isPlaying = true;
         }
     } else {
