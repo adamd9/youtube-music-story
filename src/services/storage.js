@@ -14,11 +14,11 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-async function savePlaylist({ ownerId, title, topic, summary, timeline }) {
+async function savePlaylist({ ownerId, title, topic, summary, timeline, source }) {
   await ensureDirs();
   const id = genId();
   const createdAt = new Date().toISOString();
-  const record = { id, ownerId, title, topic, summary, timeline, createdAt };
+  const record = { id, ownerId, title, topic, summary, timeline, source: source || null, createdAt };
   const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);
   await fsp.writeFile(filePath, JSON.stringify(record, null, 2));
   dbg('storage: saved playlist', { id, ownerId });

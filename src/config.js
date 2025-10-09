@@ -25,6 +25,9 @@ const config = {
     clientSecret: process.env.CLIENT_SECRET,
     // redirectUri is dynamically calculated per request
   },
+  youtube: {
+    apiKey: process.env.YOUTUBE_API_KEY || '',
+  },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     ttsModel: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',

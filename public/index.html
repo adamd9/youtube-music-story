@@ -17,6 +17,11 @@
             <div class="header-actions">
                 <button id="theme-toggle-btn" class="icon-btn" title="Toggle Dark/Light Mode">🌓</button>
                 <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+                <label for="mode-select" class="doc-label" style="margin-left:8px;">Mode</label>
+                <select id="mode-select" title="Playback source mode">
+                    <option value="spotify" selected>Spotify</option>
+                    <option value="youtube">YouTube</option>
+                </select>
             </div>
         </header>
 
@@ -27,7 +32,48 @@
             <p class="note">You need a Spotify Premium account to use this player</p>
         </div>
 
-        <div id="player" class="hidden">
+        <!-- Generation + dashboard (YouTube mode uses these on index) -->
+        <div class="player-wrapper">
+            <div class="dashboard-row-two">
+                <div class="dashboard-col">
+                    <div id="doc-gen" class="section">
+                        <h2>Create a Music Documentary</h2>
+                        <p>Enter a band or music topic. The AI will return a short history interspersed with 5 songs.</p>
+                        <div class="doc-form">
+                            <input type="text" id="doc-topic" placeholder="e.g. The Beatles early years">
+                            <textarea id="doc-prompt" placeholder="Optional: add extra instructions (tone, eras to focus, regions, etc.)"></textarea>
+                            <div class="field-row" style="gap:8px; align-items:center;">
+                                <label for="section-duration" class="doc-label" style="min-width: 160px;">Narration segment length</label>
+                                <select id="section-duration" class="" style="min-width: 180px;">
+                                    <option value="30" selected>30 seconds (default)</option>
+                                    <option value="60">1 minute</option>
+                                    <option value="180">3 minutes</option>
+                                    <option value="300">5 minutes</option>
+                                </select>
+                            </div>
+                            <div class="field-row">
+                                <button id="generate-doc" class="btn btn-primary">Generate Outline</button>
+                                <button id="import-open-btn" class="btn btn-secondary">Import by ID</button>
+                                <div id="doc-spinner" class="spinner hidden">
+                                    <span class="ring"></span>
+                                    <span id="doc-spinner-text">Generating outline…</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-col">
+                    <div id="my-playlists" class="section">
+                        <h2>My Playlists</h2>
+                        <p>Saved documentary playlists for your account.</p>
+                        <ul id="my-playlists-list" class="playlist-list"></ul>
+                        <div id="my-playlists-empty" class="note">No saved playlists yet.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="player">
             <div class="now-playing">
                 <img id="album-art" src="" alt="Album Art" class="album-art">
                 <div class="track-info">
@@ -52,6 +98,13 @@
                 <button id="next" class="btn-control" title="Next">⏭</button>
             </div>
 
+            <!-- Hidden audio element for narration/local MP3 playback (iOS-friendly) -->
+            <audio id="narration-audio" preload="metadata" playsinline></audio>
+            <!-- Visible YouTube player container (kept visible initially for debugging) -->
+            <div id="yt-player-container" style="margin:8px 0;">
+                <div id="youtube-player"></div>
+            </div>
+
             <div class="volume-control">
                 <span>🔈</span>
                 <input type="range" id="volume" min="0" max="100" value="50">
@@ -63,6 +116,30 @@
                 <ul id="playlist">
                     <!-- Playlist items will be added here -->
                 </ul>
+            </div>
+        </div>
+
+        <div class="bottom-info player-wrapper" style="margin-top: 12px;">
+            <div class="doc-output">
+                <div id="doc-status" class="note">Idle.</div>
+                <details id="doc-raw" class="hidden" style="margin-top:8px;">
+                    <summary>Show generated JSON</summary>
+                    <pre id="doc-output" style="max-height: 240px; overflow:auto; background:#111; color:#ddd; padding:8px; border-radius:4px;"></pre>
+                </details>
+                <div id="save-status" style="margin-top:8px; font-size: 0.9rem; color:#9ad; word-break: break-all;"></div>
+            </div>
+        </div>
+
+        <!-- Import modal overlay -->
+        <div id="import-modal" class="modal hidden" aria-hidden="true" role="dialog" aria-labelledby="import-title">
+            <div class="dialog">
+                <h3 id="import-title" style="margin-bottom:8px;">Import Playlist</h3>
+                <p class="note" style="margin-bottom:8px;">Enter a saved playlist ID.</p>
+                <div class="field-row">
+                    <input type="text" id="load-id-input" placeholder="Enter playlist ID" style="flex:1; min-width:220px;">
+                    <button id="load-id-btn" class="btn btn-primary">Load</button>
+                    <button id="import-cancel-btn" class="btn btn-secondary">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -79,6 +156,15 @@
                 <button id="settings-close-btn" class="close-btn">×</button>
             </div>
             <div class="modal-body">
+                <h3>Playback Mode</h3>
+                <p class="settings-note">Choose Spotify (requires Premium + login) or YouTube (no Spotify login required).</p>
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label for="settings-mode-select">Mode</label>
+                    <select id="settings-mode-select">
+                        <option value="spotify">Spotify</option>
+                        <option value="youtube">YouTube</option>
+                    </select>
+                </div>
                 <h3>Custom Spotify Credentials</h3>
                 <p class="settings-note">Use your own Spotify Developer credentials to bypass access restrictions.</p>
                 
@@ -156,7 +242,22 @@
         </div>
     </div>
 
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script>
+      (function(){
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var mode = (params.get('mode') || '').toLowerCase();
+          if (mode === 'spotify') {
+            // Forward to the full player UI for Spotify mode
+            window.location.replace('/player.html' + window.location.search);
+            return;
+          }
+          // In YouTube mode, do NOT load the Spotify SDK to avoid noise
+          window.onSpotifyWebPlaybackSDKReady = window.onSpotifyWebPlaybackSDKReady || function(){};
+        } catch (e) { /* no-op */ }
+      })();
+    </script>
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="/config.js"></script>
     <script src="player.js"></script>
 </body>

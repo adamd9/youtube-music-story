@@ -5,15 +5,15 @@ const { getInitialPlaylist } = require('../services/initialPlaylist');
 const { dbg, truncate } = require('../utils/logger');
 
 // Create/save a generated playlist record
-// body: { ownerId: string, title: string, topic: string, summary: string, timeline: array }
+// body: { ownerId: string, title: string, topic: string, summary: string, timeline: array, source?: 'spotify'|'youtube' }
 router.post('/api/playlists', async (req, res) => {
   try {
-    const { ownerId, title, topic, summary, timeline } = req.body || {};
+    const { ownerId, title, topic, summary, timeline, source } = req.body || {};
     if (!ownerId || !title || !Array.isArray(timeline)) {
       return res.status(400).json({ error: 'ownerId, title and timeline are required' });
     }
-    dbg('playlists:create', { ownerId, title, tcount: timeline.length });
-    const rec = await savePlaylist({ ownerId, title, topic, summary, timeline });
+    dbg('playlists:create', { ownerId, title, tcount: timeline.length, source });
+    const rec = await savePlaylist({ ownerId, title, topic, summary, timeline, source });
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
     console.error('save playlist error', e);

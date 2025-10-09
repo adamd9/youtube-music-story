@@ -9,6 +9,116 @@ const DEBUG = (() => {
     }
 })();
 
+// Play a YouTube track
+async function playYouTubeTrack(track) {
+    try {
+        // Pause Spotify and local audio
+        if (state.spotifyPlayer) {
+            try { state.spotifyPlayer.pause(); } catch (_) {}
+        }
+        if (narrationAudio) {
+            try { narrationAudio.pause(); } catch (_) {}
+        }
+        state.isSpotifyTrack = false;
+
+        if (!state.ytPlayer || typeof state.ytPlayer.loadVideoById !== 'function') {
+            showError('YouTube player not ready. Ensure the IFrame API loaded.');
+            return;
+        }
+
+        if (track.youtube && track.youtube.videoId) {
+            const startSeconds = 0;
+            state.ytPlayer.loadVideoById({ videoId: track.youtube.videoId, startSeconds });
+            state.ytPlayer.playVideo();
+            state.isPlaying = true;
+            // Duration from mapping if available
+            if (Number.isFinite(track.youtube.durationSec)) {
+                state.duration = track.youtube.durationSec * 1000;
+                try {
+                    if (!track.duration || track.duration === 0) {
+                        track.duration = state.duration;
+                        renderPlaylist();
+                    }
+                } catch {}
+                updateNowPlaying({ duration: state.duration });
+            }
+        } else {
+            showError('No YouTube mapping for this track');
+        }
+
+        updatePlayPauseButton();
+    } catch (e) {
+        console.error('Error playing YouTube track:', e);
+        showError('Failed to play YouTube track');
+    }
+}
+
+// Map current playlist songs to YouTube video IDs and convert items to type 'youtube'
+async function mapYouTubeForCurrentPlaylist() {
+    try {
+        const songs = state.playlist
+            .map((t, idx) => ({ t, idx }))
+            .filter(x => x.t && x.t.type === 'spotify');
+        if (songs.length === 0) return;
+
+        const timelineReq = songs.map(({ t }) => ({
+            type: 'song',
+            title: t.name,
+            artist: t.artist,
+            duration_ms: Number.isFinite(t.duration) ? t.duration : undefined
+        }));
+
+        const resp = await fetch('/api/youtube-map-tracks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timeline: timelineReq })
+        });
+        if (!resp.ok) {
+            console.warn('YouTube mapping failed', resp.status);
+            return;
+        }
+        const json = await resp.json();
+        const mapped = Array.isArray(json.timeline) ? json.timeline : [];
+        // Merge results back to playlist by order
+        let i = 0;
+        for (const { idx } of songs) {
+            const m = mapped[i++];
+            if (m && m.youtube && m.youtube.videoId) {
+                state.playlist[idx] = {
+                    ...state.playlist[idx],
+                    type: 'youtube',
+                    youtube: m.youtube
+                };
+            }
+        }
+        renderPlaylist();
+
+        // Persist mappings back into the original doc timeline and PATCH playlist if we have an id
+        try {
+            if (state.lastDoc && Array.isArray(state.lastDoc.timeline)) {
+                let si = 0;
+                state.lastDoc.timeline = state.lastDoc.timeline.map(item => {
+                    if (!item || item.type !== 'song') return item;
+                    const mappedItem = mapped[si++];
+                    if (mappedItem && mappedItem.youtube && mappedItem.youtube.videoId) {
+                        return { ...item, youtube: mappedItem.youtube };
+                    }
+                    return item;
+                });
+                if (state.loadedPlaylistId) {
+                    fetch(`/api/playlists/${encodeURIComponent(state.loadedPlaylistId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ timeline: state.lastDoc.timeline, source: 'youtube' })
+                    }).catch(() => {});
+                }
+            }
+        } catch {}
+    } catch (e) {
+        console.error('mapYouTubeForCurrentPlaylist error', e);
+    }
+}
+
 function clearAccessToken(reason) {
     try {
         const storage = window.sessionStorage || window.localStorage;
@@ -17,10 +127,17 @@ function clearAccessToken(reason) {
     state.accessToken = null;
     dbg('cleared access token', { reason });
     try {
-        // Hide player and show login prompt
-        if (playerSection) playerSection.classList.add('hidden');
-        if (loginSection) loginSection.classList.remove('hidden');
-        if (docStatusEl) docStatusEl.textContent = 'Please log in to start.';
+        // In YouTube mode, keep the player visible pre-auth
+        if (state.mode === 'youtube') {
+            if (playerSection) playerSection.classList.remove('hidden');
+            if (loginSection) loginSection.classList.add('hidden');
+            if (docStatusEl) docStatusEl.textContent = 'YouTube mode: load or generate a playlist to begin.';
+        } else {
+            // Hide player and show login prompt for Spotify mode
+            if (playerSection) playerSection.classList.add('hidden');
+            if (loginSection) loginSection.classList.remove('hidden');
+            if (docStatusEl) docStatusEl.textContent = 'Please log in to start.';
+        }
     } catch {}
 }
 
@@ -73,7 +190,7 @@ const dbg = (...args) => { if (DEBUG) console.log('[DBG]', ...args); };
 
 // My Playlists rendering and actions
 async function refreshMyPlaylists() {
-    const ownerId = await fetchSpotifyUserId();
+    const ownerId = (state.mode === 'youtube') ? 'anonymous' : await fetchSpotifyUserId();
     if (!ownerId) {
         if (myPlaylistsEmpty) myPlaylistsEmpty.textContent = 'Login required to view saved playlists.';
         return;
@@ -82,7 +199,7 @@ async function refreshMyPlaylists() {
         // Fetch both completed playlists and active jobs
         const [playlistsResp, jobsResp] = await Promise.all([
             fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`),
-            fetch(`/api/users/${encodeURIComponent(ownerId)}/jobs`)
+            state.mode === 'youtube' ? Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) }) : fetch(`/api/users/${encodeURIComponent(ownerId)}/jobs`)
         ]);
         
         const playlistsJson = playlistsResp.ok ? await playlistsResp.json() : { playlists: [] };
@@ -103,7 +220,7 @@ async function refreshMyPlaylists() {
         
         if (myPlaylistsEmpty) myPlaylistsEmpty.classList.add('hidden');
         
-        // Show active jobs first
+        // Show active jobs first (Spotify mode only)
         activeJobs.forEach(job => {
             const li = document.createElement('li');
             const topic = job.params?.topic || '(generating)';
@@ -268,6 +385,10 @@ const state = {
     playlist: [],
     currentTrackIndex: 0,
     isSpotifyTrack: true,
+    // Global playback mode: 'spotify' | 'youtube'
+    mode: 'spotify',
+    // YouTube IFrame Player instance (when initialized)
+    ytPlayer: null,
     accessToken: null,
     deviceId: null,
     isInitialized: false,
@@ -275,6 +396,7 @@ const state = {
     isGeneratingDoc: false,
     startedTrackIndex: -1,
     loadedPlaylistId: null,
+    lastDoc: null,
     // Section clip control (seconds)
     sectionClipSeconds: 30,
     // Internal timing for Spotify clip limiting
@@ -429,6 +551,12 @@ const customRedirectUriInput = document.getElementById('custom-redirect-uri');
 const saveCredentialsBtn = document.getElementById('save-credentials-btn');
 const clearCredentialsBtn = document.getElementById('clear-credentials-btn');
 const openSettingsFromDenied = document.getElementById('open-settings-from-denied');
+// After DOM elements are bound, apply mode layout visibility
+applyModeLayoutVisibility();
+// Mode toggle and YouTube elements
+const modeSelect = document.getElementById('mode-select');
+const ytPlayerContainer = document.getElementById('yt-player-container');
+const ytPlayerHost = document.getElementById('youtube-player');
 
 // Built-in default album art (inline SVG, dark gray square with music note)
 const DEFAULT_ALBUM_ART = 'data:image/svg+xml;utf8,\
@@ -447,9 +575,103 @@ if (narrationAudio) {
     narrationAudio.volume = state.volume;
 }
 
+// Mode persistence utilities
+const MODE_STORAGE_KEY = 'playback_mode';
+function getInitialMode() {
+    try {
+        const url = new URL(window.location.href);
+        const qp = (url.searchParams.get('mode') || '').toLowerCase();
+        if (qp === 'spotify' || qp === 'youtube') return qp;
+    } catch {}
+    try {
+        const stored = localStorage.getItem(MODE_STORAGE_KEY);
+        if (stored === 'spotify' || stored === 'youtube') return stored;
+    } catch {}
+    return 'spotify';
+}
+function persistMode(mode) {
+    try { localStorage.setItem(MODE_STORAGE_KEY, mode); } catch {}
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('mode', mode);
+        window.history.replaceState({}, '', url.toString());
+    } catch {}
+}
+function applyModeToUI(mode) {
+    try { if (modeSelect) modeSelect.value = mode; } catch {}
+    // Keep YouTube container visible for now (debugging). Later we may hide unless youtube mode.
+}
+
+function applyModeLayoutVisibility() {
+    try {
+        const loginNote = document.querySelector('#login .note');
+        if (state.mode === 'youtube') {
+            if (loginNote) loginNote.textContent = 'YouTube mode: Spotify login not required.';
+            if (playerSection) playerSection.classList.remove('hidden');
+            if (loginSection) loginSection.classList.add('hidden');
+        } else {
+            if (loginNote) loginNote.textContent = 'You need a Spotify Premium account to use this player';
+            if (!state.accessToken) {
+                if (playerSection) playerSection.classList.add('hidden');
+                if (loginSection) loginSection.classList.remove('hidden');
+            }
+        }
+    } catch {}
+}
+
+// Initialize mode early (UI application will occur after DOM elements are bound)
+state.mode = getInitialMode();
+applyModeToUI(state.mode);
+
+// Wire mode selector
+if (modeSelect) {
+    modeSelect.addEventListener('change', () => {
+        const val = (modeSelect.value || 'spotify').toLowerCase();
+        state.mode = (val === 'youtube') ? 'youtube' : 'spotify';
+        persistMode(state.mode);
+        dbg('mode changed', state.mode);
+        applyModeLayoutVisibility();
+    });
+}
+
+// YouTube IFrame API init (global callback)
+window.onYouTubeIframeAPIReady = function() {
+    try {
+        if (!ytPlayerHost || state.ytPlayer) return;
+        state.ytPlayer = new YT.Player('youtube-player', {
+            height: '225',
+            width: '400',
+            videoId: '', // none initially
+            playerVars: {
+                autoplay: 0,
+                controls: 1,
+                rel: 0,
+                modestbranding: 1
+            },
+            events: {
+                onReady: (ev) => { dbg('YouTube player ready'); },
+                onStateChange: (ev) => {
+                    if (!ev || typeof YT === 'undefined') return;
+                    if (ev.data === YT.PlayerState.ENDED) {
+                        // Advance only when we're currently on a youtube track
+                        if (state.currentTrack && state.currentTrack.type === 'youtube') {
+                            playNext();
+                        }
+                    }
+                }
+            }
+        });
+        dbg('YouTube IFrame API initialized');
+    } catch (e) {
+        console.error('YouTube init error', e);
+    }
+};
+
 // Build playlist from documentary JSON (supports both legacy structure + new timeline)
 function buildPlaylistFromDoc(doc) {
     try {
+        // persist the raw doc so we can PATCH mappings later
+        state.lastDoc = doc || null;
         const newPlaylist = [];
 
         if (doc && Array.isArray(doc.timeline)) {
@@ -552,6 +774,11 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
+        // If YouTube mode, map songs to YouTube video IDs
+        if (state.mode === 'youtube') {
+            mapYouTubeForCurrentPlaylist().catch(err => console.error('YouTube mapping error', err));
+        }
+
     } catch (e) {
         console.error('Failed to build playlist from doc:', e);
         showError('Failed to build playlist from generated outline');
@@ -636,8 +863,10 @@ async function parseHash() {
             console.log('Token present, waiting for Spotify SDK to be ready...');
         }
     } else if (window.location.pathname === '/player.html') {
-        // If we're on the player page but don't have a token, redirect to login
-        window.location.href = '/';
+        // If on player page without a token: only redirect when Spotify mode
+        if (state.mode !== 'youtube') {
+            window.location.href = '/';
+        }
     }
 }
 
@@ -882,10 +1111,13 @@ function renderPlaylist() {
         `;
         
         li.addEventListener('click', () => {
-            // Do not allow playback until the user is logged in
+            // Allow playback without Spotify auth when mode is YouTube or item is local MP3
             if (!state.accessToken) {
-                try { if (docStatusEl) docStatusEl.textContent = 'Please log in to play audio.'; } catch {}
-                return;
+                const isPlayableWithoutSpotify = (state.mode === 'youtube') || (track && track.type === 'mp3') || (track && track.type === 'youtube');
+                if (!isPlayableWithoutSpotify) {
+                    try { if (docStatusEl) docStatusEl.textContent = 'Please log in with Spotify or switch to YouTube mode.'; } catch {}
+                    return;
+                }
             }
             dbg('playlist click', { index, track });
             playTrack(index);
@@ -940,10 +1172,12 @@ async function playTrack(index) {
     });
     
     // Play the track based on its type
-    if (state.isSpotifyTrack) {
+    if (state.currentTrack.type === 'spotify') {
         await playSpotifyTrack(state.currentTrack);
-    } else {
+    } else if (state.currentTrack.type === 'mp3') {
         await playLocalMP3(state.currentTrack);
+    } else if (state.currentTrack.type === 'youtube') {
+        await playYouTubeTrack(state.currentTrack);
     }
     
     // Update playlist UI
@@ -1047,6 +1281,10 @@ async function playLocalMP3(track) {
         // Pause Spotify if currently playing
         if (state.spotifyPlayer) {
             try { state.spotifyPlayer.pause(); } catch (_) {}
+        }
+        // Pause YouTube if active
+        if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') {
+            try { state.ytPlayer.pauseVideo(); } catch (_) {}
         }
         // Stop any WebAudio source
         if (state.audioSource) {
@@ -1296,11 +1534,28 @@ function showAccessDeniedOverlay() {
 
 // Initialize the player when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
+    // If we're on the root index and the selected mode is Spotify, forward to player.html
+    try {
+        if (window.location.pathname === '/' && state.mode === 'spotify') {
+            const qs = window.location.search || '';
+            window.location.href = `/player.html${qs}`;
+            return; // stop further init on this page
+        }
+    } catch {}
     // Check if we have an access token in the URL
     parseHash();
     // If already authenticated, refresh My Playlists immediately
     if (state.accessToken) {
         try { refreshMyPlaylists(); } catch {}
+    }
+    // Ensure layout respects mode on initial load
+    applyModeLayoutVisibility();
+    // Hide login block if mode is YouTube and no Spotify token
+    if (state.mode === 'youtube' && !state.accessToken) {
+        const loginBlock = document.getElementById('login-block');
+        if (loginBlock) loginBlock.classList.add('hidden');
+        const loginNote = document.getElementById('login-note');
+        if (loginNote) loginNote.textContent = 'Note: You only need to log in if you want to use Spotify tracks.';
     }
     
     // Ensure login button works on the index page before auth
@@ -1505,20 +1760,75 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch {}
             buildPlaylistFromDoc(data);
         };
-
         try {
+            // Branch by mode first
+            if (state.mode === 'youtube') {
+                // YouTube-only generation path, independent of Spotify token
+                try { if (docStatusEl) docStatusEl.textContent = 'Generating outline (YouTube)…'; } catch {}
+                const resp = await fetch('/api/music-doc-lite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, prompt, narrationTargetSecs })
+                });
+                if (!resp.ok) throw new Error(`Generation failed: ${resp.status}`);
+                const data = await resp.json();
+                buildFromDoc(data);
+                // Save playlist with source: 'youtube' and anonymous owner
+                const ownerId = 'anonymous';
+                const save = await fetch('/api/playlists', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ownerId,
+                        title: data?.title || `Music history: ${topic}`,
+                        topic: data?.topic || topic,
+                        summary: data?.summary || '',
+                        timeline: Array.isArray(data?.timeline) ? data.timeline : [],
+                        source: 'youtube'
+                    })
+                });
+                if (save.ok) {
+                    try { await refreshMyPlaylists(); } catch {}
+                    const j = await save.json();
+                    const pid = j?.playlist?.id;
+                    if (pid) {
+                        state.loadedPlaylistId = pid;
+                        // Update URL to include playlistId for refresh persistence
+                        try {
+                            const u = new URL(window.location.href);
+                            u.searchParams.set('playlistId', pid);
+                            window.history.replaceState({}, '', u.toString());
+                        } catch {}
+                        // If we already have mapped youtube fields in lastDoc, patch the saved playlist now
+                        try {
+                            const hasYoutube = !!(state.lastDoc && Array.isArray(state.lastDoc.timeline) && state.lastDoc.timeline.some(it => it && it.type === 'song' && it.youtube && it.youtube.videoId));
+                            if (hasYoutube) {
+                                fetch(`/api/playlists/${encodeURIComponent(pid)}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ timeline: state.lastDoc.timeline, source: 'youtube' })
+                                }).catch(() => {});
+                            }
+                        } catch {}
+                        if (saveStatusEl) saveStatusEl.textContent = `Saved (YouTube). Share ID: ${pid} — ${window.location.origin}/player.html?playlistId=${pid}`;
+                    }
+                }
+                return;
+            }
+
+            // Spotify mode requires token
             if (!state.accessToken) {
                 throw new Error('Spotify login required. Please log in to generate documentaries.');
             }
 
             const ownerId = await fetchSpotifyUserId();
-            
+
             // Create job and get jobId
             try { 
                 if (docStatusEl) docStatusEl.textContent = 'Starting documentary generation...';
                 if (docSpinnerText) docSpinnerText.textContent = 'Starting documentary generation...';
             } catch {}
-            
+
             const docResp = await fetch('/api/music-doc', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1530,21 +1840,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     narrationTargetSecs 
                 })
             });
-            
+
             if (!docResp.ok) {
                 const errText = await docResp.text().catch(() => '');
                 throw new Error(`Failed to start job: ${docResp.status} ${errText}`);
             }
-            
+
             const { jobId } = await docResp.json();
             dbg('Job created', { jobId });
-            
+
             // Refresh My Playlists to show the new job
             try { await refreshMyPlaylists(); } catch {}
-            
+
             // Connect to SSE stream for progress updates
             connectToJobStream(jobId);
-            
+
         } catch (err) {
             console.error('doc gen failed', err);
             if (docStatusEl) docStatusEl.textContent = `Generation failed: ${err.message}`;
@@ -1624,12 +1934,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Hide player sections until something is loaded
-    setPlayerSectionsVisible(false);
+    // Hide player sections until something is loaded (except in YouTube mode)
+    if (state.mode === 'youtube') {
+        setPlayerSectionsVisible(true);
+    } else {
+        setPlayerSectionsVisible(false);
+    }
 
     // Auto-load by playlistId query param (only when logged in)
     try {
-        if (state.accessToken) {
+        if (state.accessToken || state.mode === 'youtube') {
             const params = new URLSearchParams(window.location.search);
             const pid = params.get('playlistId');
             if (pid) {
@@ -1640,80 +1954,97 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
 
     // If no explicit playlistId:
-    // Do nothing until logged in. Once logged in:
+    // Do nothing until logged in (Spotify). In YouTube mode or after login:
     // 1) If the user has at least one playlist, load their latest
     // 2) Else, load env-configured initial playlist (server returns from runtime data)
     try {
-        if (!state.accessToken) {
-            showEmptyState('Login to start. Generate an outline or import a playlist after logging in.');
-        } else {
-            const params = new URLSearchParams(window.location.search);
-            const pid = params.get('playlistId');
-            if (!pid) {
-                let loaded = false;
-                // Try user latest only if logged in
-                let ownerId = null;
-                if (state.accessToken) {
-                    ownerId = await fetchSpotifyUserId();
-                }
-                if (ownerId) {
-                    try {
-                        const lr = await fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`);
-                        if (lr.ok) {
-                            const ljson = await lr.json();
-                            const list = Array.isArray(ljson?.playlists) ? ljson.playlists : [];
-                            if (list.length > 0) {
-                                const latest = list[0]; // storage sorts desc by createdAt
-                                if (latest && Array.isArray(latest.timeline)) {
-                                    try {
-                                        if (docTitleDisplay) docTitleDisplay.textContent = latest?.title || '-';
-                                        if (docTopicDisplay) docTopicDisplay.textContent = latest?.topic || '-';
-                                        if (docSummaryDisplay) docSummaryDisplay.textContent = latest?.summary || '-';
-                                    } catch {}
-                                    try {
-                                        if (docOutputEl) docOutputEl.textContent = JSON.stringify(latest, null, 2);
-                                        if (docRawDetails) docRawDetails.classList.remove('hidden');
-                                    } catch {}
-                                    buildPlaylistFromDoc(latest);
-                                    if (latest.id) state.loadedPlaylistId = latest.id;
-                                    loaded = true;
-                                }
+        const params = new URLSearchParams(window.location.search);
+        const pid = params.get('playlistId');
+        if (!pid) {
+            let loaded = false;
+            // Try user latest only if appropriate
+            let ownerId = null;
+            if (state.mode === 'youtube') {
+                ownerId = 'anonymous';
+            } else if (state.accessToken) {
+                ownerId = await fetchSpotifyUserId();
+            }
+            if (ownerId) {
+                try {
+                    const lr = await fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`);
+                    if (lr.ok) {
+                        const ljson = await lr.json();
+                        const list = Array.isArray(ljson?.playlists) ? ljson.playlists : [];
+                        if (list.length > 0) {
+                            const latest = list[0]; // storage sorts desc by createdAt
+                            if (latest && Array.isArray(latest.timeline)) {
+                                try {
+                                    if (docTitleDisplay) docTitleDisplay.textContent = latest?.title || '-';
+                                    if (docTopicDisplay) docTopicDisplay.textContent = latest?.topic || '-';
+                                    if (docSummaryDisplay) docSummaryDisplay.textContent = latest?.summary || '-';
+                                } catch {}
+                                try {
+                                    if (docOutputEl) docOutputEl.textContent = JSON.stringify(latest, null, 2);
+                                    if (docRawDetails) docRawDetails.classList.remove('hidden');
+                                } catch {}
+                                buildPlaylistFromDoc(latest);
+                                if (latest.id) state.loadedPlaylistId = latest.id;
+                                loaded = true;
                             }
                         }
-                    } catch {}
-                }
+                    }
+                } catch {}
+            }
 
-                if (!loaded) {
-                    // Fall back to env-configured initial (may be empty)
-                    const r = await fetch('/api/initial-playlist');
-                    if (r.ok) {
-                        const json = await r.json();
-                        const initId = json?.id || (json?.playlist && json.playlist.id);
-                        const pl = json?.playlist;
-                        if (pl && Array.isArray(pl.timeline)) {
-                            try {
-                                if (docTitleDisplay) docTitleDisplay.textContent = pl?.title || '-';
-                                if (docTopicDisplay) docTopicDisplay.textContent = pl?.topic || '-';
-                                if (docSummaryDisplay) docSummaryDisplay.textContent = pl?.summary || '-';
-                            } catch {}
-                            try {
-                                if (docOutputEl) docOutputEl.textContent = JSON.stringify(pl, null, 2);
-                                if (docRawDetails) docRawDetails.classList.remove('hidden');
-                            } catch {}
-                            buildPlaylistFromDoc(pl);
-                            if (initId) state.loadedPlaylistId = initId;
-                        } else {
-                            showEmptyState('No default playlist configured. Generate an outline or import one to begin.');
-                        }
+            if (!loaded) {
+                // Fall back to env-configured initial (may be empty)
+                const r = await fetch('/api/initial-playlist');
+                if (r.ok) {
+                    const json = await r.json();
+                    const initId = json?.id || (json?.playlist && json.playlist.id);
+                    const pl = json?.playlist;
+                    if (pl && Array.isArray(pl.timeline)) {
+                        try {
+                            if (docTitleDisplay) docTitleDisplay.textContent = pl?.title || '-';
+                            if (docTopicDisplay) docTopicDisplay.textContent = pl?.topic || '-';
+                            if (docSummaryDisplay) docSummaryDisplay.textContent = pl?.summary || '-';
+                        } catch {}
+                        try {
+                            if (docOutputEl) docOutputEl.textContent = JSON.stringify(pl, null, 2);
+                            if (docRawDetails) docRawDetails.classList.remove('hidden');
+                        } catch {}
+                        buildPlaylistFromDoc(pl);
+                        if (initId) state.loadedPlaylistId = initId;
                     } else {
                         showEmptyState('No default playlist configured. Generate an outline or import one to begin.');
                     }
+                } else {
+                    showEmptyState('No default playlist configured. Generate an outline or import one to begin.');
                 }
             }
         }
     } catch {}
 
     // (removed duplicate My Playlists rendering block)
+
+    // Import by ID modal handlers
+    if (importOpenBtn && importModal) {
+        importOpenBtn.addEventListener('click', () => {
+            importModal.classList.remove('hidden');
+            try { if (loadIdInput) loadIdInput.focus(); } catch {}
+        });
+    }
+    if (importCancelBtn && importModal) {
+        importCancelBtn.addEventListener('click', () => {
+            importModal.classList.add('hidden');
+        });
+    }
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && importModal && !importModal.classList.contains('hidden')) {
+            importModal.classList.add('hidden');
+        }
+    });
 
     // Share button
     if (shareBtn) {
