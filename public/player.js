@@ -138,53 +138,14 @@ async function mapYouTubeForCurrentPlaylist() {
 }
 
 function clearAccessToken(reason) {
-    try {
-        const storage = window.sessionStorage || window.localStorage;
-        storage.removeItem('spotify_access_token');
-    } catch {}
+    // YouTube-only: no tokens used
     state.accessToken = null;
-    dbg('cleared access token', { reason });
-    try {
-        // In YouTube mode, keep the player visible pre-auth
-        if (state.mode === 'youtube') {
-            if (playerSection) playerSection.classList.remove('hidden');
-            if (loginSection) loginSection.classList.add('hidden');
-            if (docStatusEl) docStatusEl.textContent = 'YouTube mode: load or generate a playlist to begin.';
-        } else {
-            // Hide player and show login prompt for Spotify mode
-            if (playerSection) playerSection.classList.add('hidden');
-            if (loginSection) loginSection.classList.remove('hidden');
-            if (docStatusEl) docStatusEl.textContent = 'Please log in to start.';
-        }
-    } catch {}
+    dbg('cleared access token (YouTube-only)', { reason });
+    try { if (playerSection) playerSection.classList.remove('hidden'); if (loginSection) loginSection.classList.add('hidden'); } catch {}
 }
 
-// Fetch Spotify user id for persistence (top-level, used across features)
-async function fetchSpotifyUserId() {
-    // Do not make network calls if no access token
-    if (!state.accessToken) return null;
-    try {
-        const r = await fetch('https://api.spotify.com/v1/me', {
-            headers: { 'Authorization': `Bearer ${state.accessToken}` }
-        });
-        if (r.status === 401) {
-            // Token invalid/expired → treat as logged out and stop further attempts
-            clearAccessToken('401 on /v1/me');
-            return null;
-        }
-        if (r.status === 403) {
-            // User not added to developer dashboard
-            showAccessDeniedOverlay();
-            return null;
-        }
-        if (!r.ok) return null;
-        const me = await r.json();
-        return me?.id || null;
-    } catch (e) {
-        dbg('fetchSpotifyUserId error', e);
-        return null;
-    }
-}
+// YouTube-only: no Spotify user id; use anonymous owner elsewhere
+async function fetchSpotifyUserId() { return null; }
 
 // Show an empty state when no playlist is available
 function showEmptyState(message) {
@@ -764,122 +725,21 @@ function buildPlaylistFromDoc(doc) {
 
 // Remove activeJobs UI block
 // UI Event Listeners
-// Parse URL hash to get access token
-async function parseHash() {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const hashToken = params.get('access_token');
-    const authCode = params.get('auth_code');
-    
-    // Prefer sessionStorage; fall back to localStorage
-    const storage = window.sessionStorage || window.localStorage;
-    
-    // Handle custom auth code exchange
-    if (authCode && !hashToken) {
-        const creds = getCustomCredentials();
-        if (creds && creds.clientId && creds.clientSecret) {
-            try {
-                dbg('Exchanging auth code for token with custom credentials');
-                const response = await fetch('/api/exchange-code', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        code: authCode,
-                        client_id: creds.clientId,
-                        client_secret: creds.clientSecret,
-                        redirect_uri: getRedirectUri()
-                    })
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    try { storage.setItem('spotify_access_token', data.access_token); } catch {}
-                    if (data.refresh_token) {
-                        try { storage.setItem('spotify_refresh_token', data.refresh_token); } catch {}
-                    }
-                    state.accessToken = data.access_token;
-                    // Clear hash
-                    try { window.history.replaceState({}, '', window.location.pathname + window.location.search); } catch {}
-                } else {
-                    console.error('Failed to exchange code for token');
-                    window.location.href = '/';
-                    return;
-                }
-            } catch (error) {
-                console.error('Code exchange error:', error);
-                window.location.href = '/';
-                return;
-            }
-        }
-    } else if (hashToken) {
-        try { storage.setItem('spotify_access_token', hashToken); } catch {}
-        // Hard clear the URL hash so the token is not visible
-        try { window.history.replaceState({}, '', window.location.pathname + window.location.search); } catch {}
-        state.accessToken = hashToken;
-    } else {
-        // Attempt to retrieve from storage
-        try { state.accessToken = storage.getItem('spotify_access_token') || null; } catch { state.accessToken = null; }
-    }
-    
-    dbg('parseHash', { hasToken: !!state.accessToken, path: window.location.pathname });
+// Parse URL hash (no-op in YouTube-only)
+async function parseHash() { state.accessToken = null; }
 
-    if (state.accessToken) {
-        if (state.sdkReady) {
-            initPlayer();
-        } else {
-            console.log('Token present, waiting for Spotify SDK to be ready...');
-        }
-    } else if (window.location.pathname === '/player.html') {
-        // If on player page without a token: only redirect when Spotify mode
-        if (state.mode !== 'youtube') {
-            window.location.href = '/';
-        }
-    }
-}
-
-// Initialize the player
+// Initialize the player (YouTube + narration only)
 async function initPlayer() {
     if (state.isInitialized) return;
-    
     try {
-        // Set up Spotify Web Playback
-        state.spotifyPlayer = new Spotify.Player({
-            name: 'Spotify MP3 Mix Player',
-            getOAuthToken: cb => { cb(state.accessToken); },
-            volume: state.volume
-        });
-
-    // In case the access token arrives via hash after redirect, refresh playlists
-    window.addEventListener('hashchange', () => {
-        const prev = !!state.accessToken;
-        parseHash();
-        if (!prev && state.accessToken) {
-            try { refreshMyPlaylists(); } catch {}
-        }
-    });
-
         // Set up Web Audio API for local MP3 playback
         state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         state.gainNode = state.audioContext.createGain();
         state.gainNode.gain.value = state.volume;
-        
-        // Set up event listeners
+
+        // Bind UI
         setupEventListeners();
-        
-        // Connect to the Spotify player
-        const connected = await state.spotifyPlayer.connect();
-        if (connected) {
-            console.log('Connected to Spotify player');
-            
-            // Show the player and hide the login section
-            if (loginSection) {
-                loginSection.classList.add('hidden');
-            }
-            playerSection.classList.remove('hidden');
-            
-            // Default playlist setup removed; playlist is built from generated or loaded docs
-        }
-        
+        try { if (loginSection) loginSection.classList.add('hidden'); if (playerSection) playerSection.classList.remove('hidden'); } catch {}
         state.isInitialized = true;
     } catch (error) {
         console.error('Error initializing player:', error);
@@ -889,97 +749,8 @@ async function initPlayer() {
 
 // Set up event listeners
 function setupEventListeners() {
-    // Spotify Player Events
-    state.spotifyPlayer.addListener('ready', ({ device_id }) => {
-        console.log('Ready with Device ID', device_id);
-        dbg('player ready', { device_id });
-        state.deviceId = device_id;
-        transferPlaybackHere(device_id);
-    });
-
-    state.spotifyPlayer.addListener('player_state_changed', (playerState) => {
-        if (!playerState) return;
-        // If we're currently playing a local MP3, ignore Spotify updates to avoid UI flicker/overwrite
-        if (!state.isSpotifyTrack) {
-            dbg('ignore spotify player_state_changed (local active)');
-            return;
-        }
-        
-        // Spotify SDK provides current track in track_window
-        const currentTrack = playerState.track_window?.current_track;
-        const positionMs = playerState.position; // ms
-        const isPaused = playerState.paused;
-        const durationMs = currentTrack?.duration_ms ?? state.duration;
-
-        dbg('player_state_changed', {
-            name: currentTrack?.name,
-            artists: currentTrack?.artists?.map(a => a.name).join(', '),
-            positionMs,
-            durationMs,
-            paused: isPaused
-        });
-
-        if (currentTrack) {
-            updateNowPlaying({
-                name: currentTrack.name,
-                artist: (currentTrack.artists || []).map(a => a.name).join(', '),
-                albumArt: currentTrack.album?.images?.[0]?.url || '',
-                duration: durationMs,
-                position: positionMs,
-                isPlaying: !isPaused
-            });
-            // Persist duration to playlist item so durations show in the list
-            try {
-                if (Number.isFinite(durationMs) && durationMs > 0) {
-                    const idx = state.currentTrackIndex;
-                    const plItem = state.playlist && state.playlist[idx];
-                    if (plItem && (!plItem.duration || plItem.duration === 0)) {
-                        plItem.duration = durationMs;
-                        renderPlaylist();
-                    }
-                }
-            } catch {}
-        }
-    });
-    
-    state.spotifyPlayer.addListener('initialization_error', ({ message }) => {
-        console.error('Initialization Error:', message);
-        showError('Failed to initialize Spotify player');
-    });
-    
-    state.spotifyPlayer.addListener('authentication_error', ({ message }) => {
-        console.error('Authentication Error:', message);
-        showError('Authentication failed. Please log in again.');
-        window.location.href = '/';
-    });
-    
-    state.spotifyPlayer.addListener('account_error', ({ message }) => {
-        console.error('Account Error:', message);
-        showError('Spotify Premium account required');
-    });
-    
-    // UI Event Listeners
-    if (loginButton) {
-        loginButton.addEventListener('click', () => {
-            const redirectUri = getRedirectUri();
-            // Check if custom credentials are configured
-            const creds = getCustomCredentials();
-            if (creds && creds.clientId) {
-                // Use custom auth flow
-                const params = new URLSearchParams({
-                    client_id: creds.clientId,
-                    redirect_uri: redirectUri
-                });
-                window.location.href = `/login-custom?${params.toString()}`;
-            } else {
-                // Use default auth flow
-                const params = new URLSearchParams({
-                    redirect_uri: redirectUri
-                });
-                window.location.href = `/login?${params.toString()}`;
-            }
-        });
-    }
+    // UI Event Listeners (YouTube + narration)
+    // No login/auth handlers in YouTube-only mode
     
     // Note: We also bind these globally below for YouTube mode; guard against double-binding
     if (!state.uiBound) {
@@ -997,14 +768,13 @@ function setupEventListeners() {
         const rect = progressContainer.getBoundingClientRect();
         const pos = (e.clientX - rect.left) / rect.width;
         const seekTime = pos * state.duration;
-        dbg('seek', { pos, seekTimeMs: seekTime, forSpotify: state.isSpotifyTrack });
-        
-        if (state.isSpotifyTrack) {
-            // Spotify seek expects milliseconds, and state.duration is already in ms
-            state.spotifyPlayer.seek(Math.floor(seekTime));
+        dbg('seek', { pos, seekTimeMs: seekTime });
+        // Seek based on current track type
+        if (state.currentTrack && state.currentTrack.type === 'youtube') {
+            try { if (state.ytPlayer && typeof state.ytPlayer.seekTo === 'function') state.ytPlayer.seekTo(Math.max(0, seekTime / 1000), true); } catch {}
         } else {
             // For local MP3, restart at the new offset
-            resumeLocalAt(seekTime / 1000);
+            try { resumeLocalAt(seekTime / 1000); } catch {}
         }
     });
     
@@ -1013,9 +783,6 @@ function setupEventListeners() {
         const volume = e.target.value / 100;
         state.volume = volume;
         
-        if (state.spotifyPlayer) {
-            state.spotifyPlayer.setVolume(volume);
-        }
         if (state.gainNode) {
             state.gainNode.gain.value = volume;
         }
@@ -1028,35 +795,8 @@ function setupEventListeners() {
     requestAnimationFrame(updateProgress);
 }
 
-// Transfer playback to this device
-async function transferPlaybackHere(deviceId) {
-    try {
-        const response = await fetch('https://api.spotify.com/v1/me/player', {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${state.accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                device_ids: [deviceId],
-                play: false
-            })
-        });
-        
-        if (response.status === 403) {
-            showAccessDeniedOverlay();
-            return;
-        }
-        
-        if (!response.ok) {
-            throw new Error('Failed to transfer playback');
-        }
-        
-        console.log('Playback transferred to this device');
-    } catch (error) {
-        console.error('Error transferring playback:', error);
-    }
-}
+// No-op in YouTube-only mode
+async function transferPlaybackHere(_deviceId) { return; }
 
 // Legacy hard-coded default playlist was removed to avoid overriding loaded/generated playlists
 
