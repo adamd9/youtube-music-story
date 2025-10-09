@@ -581,16 +581,8 @@ if (narrationAudio) {
 // Mode persistence utilities
 const MODE_STORAGE_KEY = 'playback_mode';
 function getInitialMode() {
-    try {
-        const url = new URL(window.location.href);
-        const qp = (url.searchParams.get('mode') || '').toLowerCase();
-        if (qp === 'spotify' || qp === 'youtube') return qp;
-    } catch {}
-    try {
-        const stored = localStorage.getItem(MODE_STORAGE_KEY);
-        if (stored === 'spotify' || stored === 'youtube') return stored;
-    } catch {}
-    return 'spotify';
+    // For now we force YouTube mode and ignore URL/localStorage
+    return 'youtube';
 }
 function persistMode(mode) {
     try { localStorage.setItem(MODE_STORAGE_KEY, mode); } catch {}
@@ -601,8 +593,15 @@ function persistMode(mode) {
     } catch {}
 }
 function applyModeToUI(mode) {
-    try { if (modeSelect) modeSelect.value = mode; } catch {}
-    // Keep YouTube container visible for now (debugging). Later we may hide unless youtube mode.
+    try {
+        if (modeSelect) {
+            modeSelect.value = mode;
+            // Hide the mode selector from UI while Spotify is disabled
+            modeSelect.classList.add('hidden');
+            const p = modeSelect.parentElement; if (p) p.classList.add('hidden');
+        }
+    } catch {}
+    // Keep YouTube container visible
 }
 
 function applyModeLayoutVisibility() {
@@ -634,16 +633,7 @@ if (!state.uiBound) {
     state.uiBound = true;
 }
 
-// Wire mode selector
-if (modeSelect) {
-    modeSelect.addEventListener('change', () => {
-        const val = (modeSelect.value || 'spotify').toLowerCase();
-        state.mode = (val === 'youtube') ? 'youtube' : 'spotify';
-        persistMode(state.mode);
-        dbg('mode changed', state.mode);
-        applyModeLayoutVisibility();
-    });
-}
+// Mode selector disabled (hidden) while Spotify is off
 
 // YouTube IFrame API init (global callback)
 window.onYouTubeIframeAPIReady = function() {
