@@ -43,17 +43,32 @@ Built with OpenAI for intelligent content generation and TTS narration, and the 
    # Development Features
    MOCK_TTS=0         # set 1 to use a local placeholder MP3 instead of OpenAI TTS
 
-   # YouTube Data API v3
-   # Create an API key in Google Cloud Console and restrict it to YouTube Data API v3
+   # YouTube Search Method
+   YOUTUBE_SEARCH_METHOD=scrape  # 'scrape' (no API key) or 'api' (requires key)
+   
+   # YouTube Data API v3 (only needed if YOUTUBE_SEARCH_METHOD=api)
    YOUTUBE_API_KEY=your_youtube_data_api_key
    ```
 
-### 2. Enable YouTube Data API v3
+### 2. Choose YouTube Search Method
 
-1. Go to Google Cloud Console → APIs & Services → Credentials
-2. Create an API key (restrict it to the YouTube Data API v3)
-3. Enable the API: APIs & Services → Library → "YouTube Data API v3"
-4. Paste the key into `YOUTUBE_API_KEY` in `.env`
+You have two options for searching YouTube videos:
+
+**Option A: Scraping (Default - No API Key Required)**
+- Set `YOUTUBE_SEARCH_METHOD=scrape` in `.env`
+- Uses the `youtube-sr` package to scrape YouTube search results
+- No quota limits, no API key needed
+- May be less reliable if YouTube changes their HTML structure
+
+**Option B: YouTube Data API v3 (Requires API Key)**
+- Set `YOUTUBE_SEARCH_METHOD=api` in `.env`
+- Requires a Google Cloud API key with YouTube Data API v3 enabled
+- More reliable but has daily quota limits (10,000 units/day free tier)
+- Setup steps:
+  1. Go to Google Cloud Console → APIs & Services → Credentials
+  2. Create an API key (restrict it to the YouTube Data API v3)
+  3. Enable the API: APIs & Services → Library → "YouTube Data API v3"
+  4. Paste the key into `YOUTUBE_API_KEY` in `.env`
 
 ### 3. Install Dependencies
 

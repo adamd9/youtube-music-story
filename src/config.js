@@ -22,6 +22,7 @@ const config = {
   initialPlaylistId: (process.env.INITIAL_PLAYLIST_ID || '').trim(),
   youtube: {
     apiKey: process.env.YOUTUBE_API_KEY || '',
+    searchMethod: (process.env.YOUTUBE_SEARCH_METHOD || 'scrape').toLowerCase(),
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
