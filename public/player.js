@@ -1505,28 +1505,65 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Share button
-    if (shareBtn) {
-        shareBtn.addEventListener('click', async () => {
-            // If we have a recently saved id from save-status text, try to reuse it; otherwise use current loadIdInput
-            const text = saveStatusEl ? saveStatusEl.textContent : '';
-            let id = '';
-            const m = text && text.match(/Share ID:\s*(\w+)/);
-            if (m) id = m[1];
-            if (!id && loadIdInput) id = (loadIdInput.value || '').trim();
+    // Share playlist modal handlers
+    const sharePlaylistBtn = document.getElementById('share-playlist-btn');
+    const shareModal = document.getElementById('share-modal');
+    const shareLinkInput = document.getElementById('share-link-input');
+    const shareCopyBtn = document.getElementById('share-copy-btn');
+    const shareCancelBtn = document.getElementById('share-cancel-btn');
+    const shareCopyStatus = document.getElementById('share-copy-status');
+
+    if (sharePlaylistBtn && shareModal && shareLinkInput) {
+        sharePlaylistBtn.addEventListener('click', async () => {
+            const id = state.loadedPlaylistId;
             if (!id) {
-                if (saveStatusEl) saveStatusEl.textContent = 'Nothing to share yet. Generate or load a playlist first.';
+                showError('No playlist loaded. Generate or import a playlist first.');
                 return;
             }
-            const url = `${window.location.origin}/player.html?playlistId=${id}`;
+            const url = `${window.location.origin}/?playlistId=${id}`;
+            shareLinkInput.value = url;
+            shareModal.classList.remove('hidden');
+            shareModal.setAttribute('aria-hidden', 'false');
+            // Auto-copy to clipboard
             try {
                 await navigator.clipboard.writeText(url);
-                if (saveStatusEl) saveStatusEl.textContent = `Share link copied to clipboard: ${url}`;
+                if (shareCopyStatus) {
+                    shareCopyStatus.style.display = 'block';
+                    setTimeout(() => { shareCopyStatus.style.display = 'none'; }, 2000);
+                }
             } catch {
-                if (saveStatusEl) saveStatusEl.textContent = `Share link: ${url}`;
+                // Clipboard API may fail; user can still manually copy
+            }
+            try { shareLinkInput.focus(); shareLinkInput.select(); } catch {}
+        });
+    }
+    if (shareCopyBtn && shareLinkInput) {
+        shareCopyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(shareLinkInput.value);
+                if (shareCopyStatus) {
+                    shareCopyStatus.style.display = 'block';
+                    setTimeout(() => { shareCopyStatus.style.display = 'none'; }, 2000);
+                }
+            } catch {
+                // Fallback: select text for manual copy
+                try { shareLinkInput.focus(); shareLinkInput.select(); } catch {}
             }
         });
     }
+    if (shareCancelBtn && shareModal) {
+        shareCancelBtn.addEventListener('click', () => {
+            shareModal.classList.add('hidden');
+            shareModal.setAttribute('aria-hidden', 'true');
+        });
+    }
+    // Close share modal on Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && shareModal && !shareModal.classList.contains('hidden')) {
+            shareModal.classList.add('hidden');
+            shareModal.setAttribute('aria-hidden', 'true');
+        }
+    });
 
     // Bind section duration select (default 30s) — affects LLM prompt only, not playback
     if (sectionDurationSelect) {

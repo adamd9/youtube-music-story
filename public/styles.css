@@ -657,13 +657,13 @@ header p {
 }
 
 .modal .dialog {
-    background: #1b1b1b;
-    border: 1px solid #2e2e2e;
+    background: var(--surface-color);
+    border: 2px solid var(--border-color);
     border-radius: 10px;
-    padding: 16px;
+    padding: 20px;
     width: 100%;
     max-width: 480px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    box-shadow: var(--shadow-lg);
 }
 
 /* ------------------------------
