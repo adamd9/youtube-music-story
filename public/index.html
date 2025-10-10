@@ -114,6 +114,17 @@
             </div>
         </div>
 
+        <!-- iOS playback hint -->
+        <div id="ios-hint" class="player-wrapper hidden" style="margin-top: 12px;">
+            <div style="background: var(--surface-color); border: 2px solid var(--primary-color); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div style="flex: 1;">
+                    <strong style="color: var(--primary-color);">📱 iOS Tip:</strong>
+                    <span style="color: var(--text-primary);"> For uninterrupted playback when locked, start with a narration track or use lock screen controls to resume.</span>
+                </div>
+                <button id="ios-hint-dismiss" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem; white-space: nowrap;">Got it</button>
+            </div>
+        </div>
+
         <div class="bottom-info player-wrapper" style="margin-top: 12px;">
             <div class="doc-output">
                 <div id="doc-status" class="note">Idle.</div>

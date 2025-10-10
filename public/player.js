@@ -24,33 +24,8 @@ const DEBUG = (() => {
 // Play a YouTube track
 async function playYouTubeTrack(track) {
     try {
-        // iOS workaround: play a brief narration snippet first to establish blessed context
-        // This ensures YouTube continues playing when device is locked
-        const prevNarration = state.playlist
-            .slice(0, state.currentTrackIndex)
-            .reverse()
-            .find(t => t && t.type === 'mp3' && t.url);
-        
-        if (prevNarration && narrationAudio) {
-            try {
-                narrationAudio.src = prevNarration.url;
-                // Start 3 seconds from the end (or at start if track is shorter)
-                const duration = prevNarration.duration ? prevNarration.duration / 1000 : 5;
-                narrationAudio.currentTime = Math.max(0, duration - 3);
-                narrationAudio.volume = state.volume;
-                await narrationAudio.play();
-                // Let it play for 500ms to establish context, then switch to YouTube
-                await new Promise(resolve => setTimeout(resolve, 500));
-                narrationAudio.pause();
-            } catch (e) {
-                console.warn('Context bridge failed, proceeding with YouTube', e);
-                // Still try to pause if it was playing
-                if (narrationAudio) {
-                    try { narrationAudio.pause(); } catch (_) {}
-                }
-            }
-        } else if (narrationAudio) {
-            // No previous narration found, just pause any active audio
+        // Pause local audio
+        if (narrationAudio) {
             try { narrationAudio.pause(); } catch (_) {}
         }
 
@@ -1614,6 +1589,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         applySectionDuration();
         // Update on change
         sectionDurationSelect.addEventListener('change', applySectionDuration);
+    }
+
+    // iOS hint banner
+    const iosHint = document.getElementById('ios-hint');
+    const iosHintDismiss = document.getElementById('ios-hint-dismiss');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS && iosHint) {
+        // Check if user has dismissed it before
+        const dismissed = localStorage.getItem('ios-hint-dismissed');
+        if (!dismissed) {
+            iosHint.classList.remove('hidden');
+        }
+        
+        if (iosHintDismiss) {
+            iosHintDismiss.addEventListener('click', () => {
+                iosHint.classList.add('hidden');
+                localStorage.setItem('ios-hint-dismissed', 'true');
+            });
+        }
     }
 
     // Theme Toggle Handler
