@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { savePlaylist, getPlaylist, listPlaylistsByOwner, updatePlaylist } = require('../services/storage');
+const { mapTimelineToYouTube } = require('../services/youtubeMap');
 const { getInitialPlaylist } = require('../services/initialPlaylist');
 const { dbg, truncate } = require('../utils/logger');
 
@@ -13,7 +14,20 @@ router.post('/api/playlists', async (req, res) => {
       return res.status(400).json({ error: 'ownerId, title and timeline are required' });
     }
     dbg('playlists:create', { ownerId, title, tcount: timeline.length, source });
-    const rec = await savePlaylist({ ownerId, title, topic, summary, timeline, source });
+    // If this is a YouTube-mode playlist, map songs server-side before saving
+    let timelineToSave = timeline;
+    if (source === 'youtube') {
+      try {
+        dbg('playlists:create: mapping to YouTube (server-side)', { songs: timeline.filter(it => it && it.type === 'song').length });
+        timelineToSave = await mapTimelineToYouTube(timeline);
+        const mappedCount = timelineToSave.filter(it => it && it.type === 'song' && it.youtube && it.youtube.videoId).length;
+        dbg('playlists:create: mapped results', { mappedCount });
+      } catch (e) {
+        console.error('server youtube mapping failed', e);
+        return res.status(500).json({ error: 'YouTube mapping failed on server', details: e.message });
+      }
+    }
+    const rec = await savePlaylist({ ownerId, title, topic, summary, timeline: timelineToSave, source });
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
     console.error('save playlist error', e);

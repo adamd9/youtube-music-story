@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const config = require('../config');
+const { mapTimelineToYouTube } = require('../services/youtubeMap');
 
 // Helper: parse ISO 8601 duration (e.g., PT3M45S) into seconds
 function parseISODurationToSeconds(iso) {
@@ -54,73 +55,9 @@ router.post('/api/youtube-map-tracks', async (req, res) => {
   try {
     const apiKey = config.youtube && config.youtube.apiKey;
     if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
-
     const { timeline } = req.body || {};
-    if (!Array.isArray(timeline)) {
-      return res.status(400).json({ error: 'timeline must be an array' });
-    }
-    const out = [];
-    for (const item of timeline) {
-      if (!item || item.type !== 'song') { out.push(item); continue; }
-      const title = item.title || '';
-      const artist = item.artist || '';
-      const targetDurSec = Number.isFinite(item.duration_ms) ? Math.round(item.duration_ms / 1000) : null;
-      const q = `${title} ${artist}`.trim();
-
-      // 1) Search
-      const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-      searchUrl.searchParams.set('key', apiKey);
-      searchUrl.searchParams.set('part', 'snippet');
-      searchUrl.searchParams.set('type', 'video');
-      searchUrl.searchParams.set('maxResults', '6');
-      searchUrl.searchParams.set('q', q);
-
-      const searchResp = await fetch(searchUrl.toString());
-      if (!searchResp.ok) {
-        out.push({ ...item, youtube: { videoId: null, title: null, channelId: null, durationSec: null, matchedConfidence: 0 } });
-        continue;
-      }
-      const searchData = await searchResp.json();
-      const items = Array.isArray(searchData.items) ? searchData.items : [];
-      const ids = items.map(it => it.id && it.id.videoId).filter(Boolean).slice(0, 6);
-      if (ids.length === 0) {
-        out.push({ ...item, youtube: { videoId: null, title: null, channelId: null, durationSec: null, matchedConfidence: 0 } });
-        continue;
-      }
-
-      // 2) Fetch durations
-      const videosUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-      videosUrl.searchParams.set('key', apiKey);
-      videosUrl.searchParams.set('part', 'contentDetails,snippet');
-      videosUrl.searchParams.set('id', ids.join(','));
-      const videosResp = await fetch(videosUrl.toString());
-      const videosData = videosResp.ok ? await videosResp.json() : { items: [] };
-      const candidates = (videosData.items || []).map(v => ({
-        videoId: v.id,
-        title: v.snippet && v.snippet.title,
-        channelId: v.snippet && v.snippet.channelId,
-        channelTitle: v.snippet && v.snippet.channelTitle,
-        durationSec: parseISODurationToSeconds(v.contentDetails && v.contentDetails.duration)
-      }));
-
-      // 3) Score and pick best
-      let best = null; let bestScore = 0;
-      for (const c of candidates) {
-        const s = scoreCandidate(c, title, artist, targetDurSec);
-        if (s > bestScore) { best = c; bestScore = s; }
-      }
-
-      out.push({
-        ...item,
-        youtube: best ? {
-          videoId: best.videoId,
-          title: best.title,
-          channelId: best.channelId,
-          durationSec: best.durationSec,
-          matchedConfidence: Math.round(bestScore * 100) / 100
-        } : { videoId: null, title: null, channelId: null, durationSec: null, matchedConfidence: 0 }
-      });
-    }
+    if (!Array.isArray(timeline)) return res.status(400).json({ error: 'timeline must be an array' });
+    const out = await mapTimelineToYouTube(timeline);
     return res.json({ ok: true, timeline: out });
   } catch (e) {
     console.error('youtube-map-tracks error', e);

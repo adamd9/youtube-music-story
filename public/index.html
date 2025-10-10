@@ -104,7 +104,10 @@
             </div>
 
             <div class="playlist">
-                <h3>Playlist</h3>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <h3 style="margin: 0;">Playlist</h3>
+                    <button id="share-playlist-btn" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.85rem;" title="Share this playlist">Share</button>
+                </div>
                 <ul id="playlist">
                     <!-- Playlist items will be added here -->
                 </ul>
@@ -131,6 +134,22 @@
                     <input type="text" id="load-id-input" placeholder="Enter playlist ID" style="flex:1; min-width:220px;">
                     <button id="load-id-btn" class="btn btn-primary">Load</button>
                     <button id="import-cancel-btn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share modal overlay -->
+        <div id="share-modal" class="modal hidden" aria-hidden="true" role="dialog" aria-labelledby="share-title">
+            <div class="dialog">
+                <h3 id="share-title" style="margin-bottom:8px;">Share Playlist</h3>
+                <p class="note" style="margin-bottom:8px;">Share this link to let others listen to your playlist.</p>
+                <div class="field-row" style="flex-direction: column; gap: 12px;">
+                    <input type="text" id="share-link-input" readonly style="flex:1; min-width:100%; font-size: 0.9rem; padding: 8px;">
+                    <div class="field-row" style="gap: 8px;">
+                        <button id="share-copy-btn" class="btn btn-primary">Copy to Clipboard</button>
+                        <button id="share-cancel-btn" class="btn btn-secondary">Close</button>
+                    </div>
+                    <div id="share-copy-status" class="note" style="margin-top: 4px; color: var(--accent); display: none;">Copied to clipboard!</div>
                 </div>
             </div>
         </div>

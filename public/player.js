@@ -66,77 +66,7 @@ async function playYouTubeTrack(track) {
     }
 }
 
-// Map current playlist songs to YouTube video IDs and convert items to type 'youtube'
-async function mapYouTubeForCurrentPlaylist() {
-    try {
-        const songs = state.playlist
-            .map((t, idx) => ({ t, idx }))
-            // Map any YouTube placeholder items missing a mapped videoId
-            .filter(x => x.t && x.t.type === 'youtube' && (!x.t.youtube || !x.t.youtube.videoId));
-        if (songs.length === 0) return;
-
-        const timelineReq = songs.map(({ t }) => ({
-            type: 'song',
-            title: t.name,
-            artist: t.artist,
-            duration_ms: Number.isFinite(t.duration) ? t.duration : undefined
-        }));
-
-        const resp = await fetch('/api/youtube-map-tracks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ timeline: timelineReq })
-        });
-        if (!resp.ok) {
-            console.warn('YouTube mapping failed', resp.status);
-            return;
-        }
-        const json = await resp.json();
-        const mapped = Array.isArray(json.timeline) ? json.timeline : [];
-        // Merge results back to playlist by order
-        let i = 0;
-        for (const { idx } of songs) {
-            const m = mapped[i++];
-            if (m && m.youtube && m.youtube.videoId) {
-                state.playlist[idx] = {
-                    ...state.playlist[idx],
-                    type: 'youtube',
-                    youtube: m.youtube
-                };
-                // If this mapped entry is the current track, update the external link
-                if (idx === state.currentTrackIndex) {
-                    updateYouTubeLinkForTrack(state.playlist[idx]);
-                    updateVisualForTrack(state.playlist[idx]);
-                }
-            }
-        }
-        renderPlaylist();
-
-        // Persist mappings back into the original doc timeline and PATCH playlist if we have an id
-        try {
-            if (state.lastDoc && Array.isArray(state.lastDoc.timeline)) {
-                let si = 0;
-                state.lastDoc.timeline = state.lastDoc.timeline.map(item => {
-                    if (!item || item.type !== 'song') return item;
-                    const mappedItem = mapped[si++];
-                    if (mappedItem && mappedItem.youtube && mappedItem.youtube.videoId) {
-                        return { ...item, youtube: mappedItem.youtube };
-                    }
-                    return item;
-                });
-                if (state.loadedPlaylistId) {
-                    fetch(`/api/playlists/${encodeURIComponent(state.loadedPlaylistId)}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ timeline: state.lastDoc.timeline, source: 'youtube' })
-                    }).catch(() => {});
-                }
-            }
-        } catch {}
-    } catch (e) {
-        console.error('mapYouTubeForCurrentPlaylist error', e);
-    }
-}
+// (Client-side YouTube mapping removed; server maps during playlist creation)
 
 function clearAccessToken(reason) {
     state.accessToken = null;
@@ -711,8 +641,7 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
-        // Always map songs to YouTube video IDs
-        mapYouTubeForCurrentPlaylist().catch(err => console.error('YouTube mapping error', err));
+        // Mapping is handled server-side during playlist creation
 
     } catch (e) {
         console.error('Failed to build playlist from doc:', e);
@@ -1309,9 +1238,38 @@ document.addEventListener('DOMContentLoaded', async () => {
                         source: 'youtube'
                     })
                 });
-                if (!save.ok) throw new Error('Failed to save initial playlist');
+                if (!save.ok) {
+                    let errMsg = 'Failed to save initial playlist';
+                    try {
+                        const j = await save.json();
+                        if (j && (j.error || j.details)) errMsg = `${j.error || ''} ${j.details || ''}`.trim();
+                    } catch {
+                        try { errMsg = await save.text(); } catch {}
+                    }
+                    const isQuota = /quota/i.test(errMsg) || /YouTube mapping failed/i.test(errMsg);
+                    if (isQuota) {
+                        if (docStatusEl) docStatusEl.textContent = 'Failed: YouTube API quota exceeded. Please try again later.';
+                        showError('YouTube API quota exceeded. Try again later.');
+                        try { if (docSpinner) docSpinner.classList.add('hidden'); } catch {}
+                        try { if (generateDocBtn) generateDocBtn.disabled = false; } catch {}
+                        state.isGeneratingDoc = false;
+                        return;
+                    }
+                    throw new Error(errMsg || 'Failed to save initial playlist');
+                }
                 const saved = await save.json();
                 const pid = saved?.playlist?.id;
+                // Use server-mapped playlist timeline going forward so YouTube fields are preserved
+                if (saved && saved.playlist && Array.isArray(saved.playlist.timeline)) {
+                    try {
+                        data.title = saved.playlist.title || data.title;
+                        data.topic = saved.playlist.topic || data.topic;
+                        data.summary = saved.playlist.summary || data.summary;
+                        data.timeline = saved.playlist.timeline;
+                        // Keep a copy as our source of truth for later PATCH
+                        state.lastDoc = saved.playlist;
+                    } catch {}
+                }
                 if (pid) {
                     state.loadedPlaylistId = pid;
                     try {
@@ -1328,13 +1286,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // 3) Build UI from updated doc (with tts_url)
                 buildFromDoc(data);
 
-                // 4) Map YouTube videos; when mappings are ready, we PATCH in mapYouTubeForCurrentPlaylist()
-                // Kick off mapping now (it internally PATCHes when done if state.loadedPlaylistId exists)
-                try { await mapYouTubeForCurrentPlaylist(); } catch {}
-
-                // 5) Persist TTS URLs back to saved playlist
+                // 4) Persist TTS URLs back to saved playlist
                 if (pid) {
-                    const patchBody = { timeline: data?.timeline || [], source: 'youtube' };
+                    // Persist the latest timeline (server mapping was done on creation)
+                    const patchBody = { timeline: (state.lastDoc && Array.isArray(state.lastDoc.timeline)) ? state.lastDoc.timeline : (data?.timeline || []), source: 'youtube' };
                     // Retry once on 404 in case of a race
                     const doPatch = async (retry) => {
                         const r = await fetch(`/api/playlists/${encodeURIComponent(pid)}`, {
@@ -1393,7 +1348,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (docStatusEl) docStatusEl.textContent = 'Loading playlist…';
                 if (docRawDetails) { docRawDetails.classList.add('hidden'); docRawDetails.open = false; }
                 const r = await fetch(`/api/playlists/${encodeURIComponent(id)}`);
-                if (!r.ok) throw new Error('Not found');
+                if (!r.ok) {
+                    if (docStatusEl) docStatusEl.textContent = 'Playlist not found.';
+                    showEmptyState('No playlist found for that ID. Generate an outline or try another ID.');
+                    return;
+                }
                 const json = await r.json();
                 const pl = json?.playlist;
                 if (!pl || !Array.isArray(pl.timeline)) throw new Error('Invalid playlist data');
@@ -1427,8 +1386,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 buildPlaylistFromDoc(pl);
                 state.loadedPlaylistId = id;
             } catch (e) {
-                console.error('load by id error', e);
-                if (docStatusEl) docStatusEl.textContent = 'Playlist not found.';
+                // Graceful handling of bad IDs or network issues
+                if (docStatusEl) docStatusEl.textContent = 'Unable to load playlist.';
+                showEmptyState('Unable to load playlist. Generate an outline or try another ID.');
             }
         });
         // Trigger load on Enter key
