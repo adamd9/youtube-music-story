@@ -24,8 +24,33 @@ const DEBUG = (() => {
 // Play a YouTube track
 async function playYouTubeTrack(track) {
     try {
-        // Pause local audio
-        if (narrationAudio) {
+        // iOS workaround: play a brief narration snippet first to establish blessed context
+        // This ensures YouTube continues playing when device is locked
+        const prevNarration = state.playlist
+            .slice(0, state.currentTrackIndex)
+            .reverse()
+            .find(t => t && t.type === 'mp3' && t.url);
+        
+        if (prevNarration && narrationAudio) {
+            try {
+                narrationAudio.src = prevNarration.url;
+                // Start 3 seconds from the end (or at start if track is shorter)
+                const duration = prevNarration.duration ? prevNarration.duration / 1000 : 5;
+                narrationAudio.currentTime = Math.max(0, duration - 3);
+                narrationAudio.volume = state.volume;
+                await narrationAudio.play();
+                // Let it play for 500ms to establish context, then switch to YouTube
+                await new Promise(resolve => setTimeout(resolve, 500));
+                narrationAudio.pause();
+            } catch (e) {
+                console.warn('Context bridge failed, proceeding with YouTube', e);
+                // Still try to pause if it was playing
+                if (narrationAudio) {
+                    try { narrationAudio.pause(); } catch (_) {}
+                }
+            }
+        } else if (narrationAudio) {
+            // No previous narration found, just pause any active audio
             try { narrationAudio.pause(); } catch (_) {}
         }
 
@@ -57,17 +82,6 @@ async function playYouTubeTrack(track) {
             showError('No YouTube mapping for this track');
             updateYouTubeLinkForTrack(null);
             updateVisualForTrack(null);
-        }
-
-        // Set MediaSession metadata for iOS lock screen controls
-        if ('mediaSession' in navigator) {
-            try {
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.name || 'YouTube Track',
-                    artist: track.artist || 'Unknown Artist',
-                    artwork: [{ src: track.albumArt || DEFAULT_ALBUM_ART, sizes: '300x300', type: 'image/png' }]
-                });
-            } catch {}
         }
 
         updatePlayPauseButton();
@@ -760,15 +774,6 @@ function renderPlaylist() {
         
         li.addEventListener('click', () => {
             dbg('playlist click', { index, track });
-            // For YouTube tracks, call playVideo synchronously within click handler to preserve user gesture
-            if (track.type === 'youtube' && track.youtube && track.youtube.videoId && state.ytPlayer) {
-                try {
-                    state.ytPlayer.loadVideoById({ videoId: track.youtube.videoId, startSeconds: 0 });
-                    state.ytPlayer.playVideo();
-                } catch (e) {
-                    console.warn('Failed to start YouTube in click handler', e);
-                }
-            }
             playTrack(index);
         });
         
