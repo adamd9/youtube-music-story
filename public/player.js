@@ -59,6 +59,17 @@ async function playYouTubeTrack(track) {
             updateVisualForTrack(null);
         }
 
+        // Set MediaSession metadata for iOS lock screen controls
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.name || 'YouTube Track',
+                    artist: track.artist || 'Unknown Artist',
+                    artwork: [{ src: track.albumArt || DEFAULT_ALBUM_ART, sizes: '300x300', type: 'image/png' }]
+                });
+            } catch {}
+        }
+
         updatePlayPauseButton();
     } catch (e) {
         console.error('Error playing YouTube track:', e);
