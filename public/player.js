@@ -760,6 +760,15 @@ function renderPlaylist() {
         
         li.addEventListener('click', () => {
             dbg('playlist click', { index, track });
+            // For YouTube tracks, call playVideo synchronously within click handler to preserve user gesture
+            if (track.type === 'youtube' && track.youtube && track.youtube.videoId && state.ytPlayer) {
+                try {
+                    state.ytPlayer.loadVideoById({ videoId: track.youtube.videoId, startSeconds: 0 });
+                    state.ytPlayer.playVideo();
+                } catch (e) {
+                    console.warn('Failed to start YouTube in click handler', e);
+                }
+            }
             playTrack(index);
         });
         
