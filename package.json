@@ -1,16 +1,16 @@
 {
-  "name": "music-story-youtube",
+  "name": "music-story",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered music documentaries with narration and YouTube playback",
   "main": "src/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
     "dev": "nodemon --config nodemon.json src/server.js"
   },
-  "keywords": [],
+  "keywords": ["music", "documentary", "ai", "openai", "tts", "youtube", "narration"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "dotenv": "^17.2.2",

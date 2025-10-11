@@ -1,16 +1,30 @@
-# Music Story (YouTube)
+# Music Story
 
 **Transform any artist or music topic into an immersive audio documentary**
 
 Music Story uses AI to generate compelling, professionally-narrated documentaries that blend historical context, artist insights, and cultural analysis with perfectly curated tracks.
 
-Built with OpenAI for intelligent content generation and TTS narration, and the YouTube IFrame Player + Data API for video playback and search.
+Built with OpenAI for intelligent content generation and TTS narration, and the YouTube IFrame Player for video playback.
+
+## 🎧 Live Demo
+
+Try it now: **[musicstory.drop37.com](https://musicstory.drop37.com/)**
+
+No login required—just enter an artist or music topic and get an instant audio documentary!
+
+## Why I Built This
+
+I made this project for **me**. 
+
+Spotify recently changed their policies and stopped allowing podcast creators to use music tracks in their shows. This killed a podcast I absolutely loved—one that didn't just play music, but told the *stories* behind it. The bands, the people, the history. I love exploring new music, but what I love even more is learning the context: who made it, why they made it, what was happening in their lives.
+
+So I built this. It's a personal project that lets me keep doing what that podcast did—discover music and dive into its story—using the power of AI. No platform restrictions, no gatekeepers. Just music, history, and the stories that make it all meaningful.
 
 ## Features
 
 - **AI-Powered Documentary Generation**: Enter any artist, band, or music topic and get an instant audio documentary with historical context, cultural insights, and 5 carefully selected tracks
 - **Professional AI Narration**: High-quality text-to-speech narration using OpenAI's latest models
-- **YouTube Playback (no login required)**: Tracks are mapped to YouTube and played via the YouTube IFrame Player
+- **YouTube Playback**: Tracks are automatically mapped to YouTube and played via the YouTube IFrame Player (no login required)
 - **Save & Share**: Persistent playlists with shareable links
 - **Responsive UI**: Clean interface optimized for desktop and mobile
 - **Mock Mode**: Optional dev mode with placeholder audio to save API costs during testing
@@ -19,7 +33,7 @@ Built with OpenAI for intelligent content generation and TTS narration, and the 
 
 - Node.js (v14 or later)
 - npm (comes with Node.js)
-- A Google Cloud project with YouTube Data API v3 enabled
+- OpenAI API key
 
 ## Setup
 
@@ -30,59 +44,26 @@ Built with OpenAI for intelligent content generation and TTS narration, and the 
    ```env
    # Server
    PORT=8888
-   CLIENT_DEBUG=0     # set 1 for verbose client logs
-   SERVER_DEBUG=0     # set 1 for verbose server logs
+   CLIENT_DEBUG=0     # set to 1 for verbose client logs
+   SERVER_DEBUG=0     # set to 1 for verbose server logs
 
    # OpenAI
    OPENAI_API_KEY=your_openai_api_key
    OPENAI_TTS_MODEL=gpt-4o-mini-tts
-   OPENAI_TTS_VOICE=alloy
-   OPENAI_TTS_SPEED=1.0
-   TTS_OUTPUT_DIR=public/tts
+   OPENAI_TTS_VOICE=nova
+   OPENAI_TTS_SPEED=1.25
 
    # Development Features
-   MOCK_TTS=0         # set 1 to use a local placeholder MP3 instead of OpenAI TTS
-
-   # YouTube Search Method
-   YOUTUBE_SEARCH_METHOD=scrape  # 'scrape' (no API key) or 'api' (requires key)
-   
-   # YouTube Data API v3 (only needed if YOUTUBE_SEARCH_METHOD=api)
-   YOUTUBE_API_KEY=your_youtube_data_api_key
+   MOCK_TTS=0         # set to 1 to use a local placeholder MP3 instead of OpenAI TTS
    ```
 
-### 2. Choose YouTube Search Method
-
-You have two options for searching YouTube videos:
-
-**Option A: Scraping (Default - No API Key Required)**
-- Set `YOUTUBE_SEARCH_METHOD=scrape` in `.env`
-- Uses the `youtube-sr` package to scrape YouTube search results
-- No quota limits, no API key needed
-- May be less reliable if YouTube changes their HTML structure
-
-**Option B: YouTube Data API v3 (Requires API Key)**
-- Set `YOUTUBE_SEARCH_METHOD=api` in `.env`
-- Requires a Google Cloud API key with YouTube Data API v3 enabled
-- More reliable but has daily quota limits (10,000 units/day free tier)
-- Setup steps:
-  1. Go to Google Cloud Console → APIs & Services → Credentials
-  2. Create an API key (restrict it to the YouTube Data API v3)
-  3. Enable the API: APIs & Services → Library → "YouTube Data API v3"
-  4. Paste the key into `YOUTUBE_API_KEY` in `.env`
-
-### 3. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 4. Add MP3 Files (optional)
-
-1. Create a directory called `public/audio` in your project root
-2. Add your MP3 files to this directory
-3. Update the `setupDefaultPlaylist()` function in `public/player.js` to include your MP3 files
-
-### 5. Start the Server
+### 3. Start the Server
 
 ```bash
 npm run dev
@@ -90,7 +71,7 @@ npm run dev
 
 This runs the modular server (`src/server.js`) with nodemon and serves `public/`.
 
-### 6. Access the Application
+### 4. Access the Application
 
 Open your web browser and navigate to:
 
@@ -100,52 +81,83 @@ http://localhost:8888
 
 ## How to Use
 
-1. Open `http://localhost:8888`.
-2. Enter a topic and click "Generate Outline". The server generates the timeline.
-3. The client maps songs to YouTube and plays via the YouTube IFrame player.
-4. Playlists are saved with `ownerId: "anonymous"` by default.
+1. Open `http://localhost:8888`
+2. Enter a topic (e.g., "The Beatles early years") and click "Generate Outline"
+3. The AI generates a documentary with narration and 5 songs
+4. Songs are automatically mapped to YouTube videos and played via the YouTube IFrame player
+5. Your generated playlists are saved to **local storage** and appear in "My Playlists"
+6. All community playlists appear in "Recent Community Playlists"
 
-You can import a saved playlist via the "Import by ID" button. The URL includes `?playlistId=...` for refresh persistence.
+### First-Time vs Returning Users
 
-## Documentary Generation Flow (high level)
+- **New users**: The latest community playlist auto-loads on first visit
+- **Returning users**: Your most recent playlist auto-loads from local storage
+- **Share playlists**: Use the "Share this playlist" button to get a shareable URL with `?playlistId=...`
 
-1. LLM plans the documentary narrative and selects 5 representative songs.
-2. Client maps songs to YouTube videos (title/artist + optional hints).
-3. TTS narration is generated for narration segments.
-4. A playable interleaved timeline is built and saved.
+## Documentary Generation Flow
 
-### Example: The Prodigy
+1. **User Input**: Enter an artist, band, or music topic
+2. **AI Generation**: LLM creates a documentary outline with narration segments and 5 representative songs
+3. **YouTube Mapping**: Server automatically maps songs to YouTube videos using web scraping
+4. **TTS Generation**: OpenAI TTS converts narration text to professional audio
+5. **Playback**: Interleaved timeline of narration and music is played via YouTube IFrame Player
+6. **Persistence**: Playlist is saved and can be shared via URL
 
-**Stage 2 Plan Output**:
+### Example Output: The Prodigy
+
+**Generated Documentary Structure**:
 
 ```json
 {
-  "title": "The Prodigy: Rave to Riot",
-  "narrative_arc": "From underground rave pioneers to mainstream crossover...",
-  "era_covered": "1992-1997",
-  "required_tracks": [
+  "title": "The Prodigy: Rave Revolutionaries",
+  "topic": "The Prodigy",
+  "summary": "From underground rave pioneers to mainstream crossover icons, explore The Prodigy's explosive journey through the 1990s electronic music scene.",
+  "timeline": [
     {
-      "song_title": "Charly",
-      "approximate_year": "1992",
-      "why_essential": "Breakthrough rave anthem that defined early sound",
-      "narrative_role": "Origins - underground rave scene"
+      "type": "narration",
+      "title": "Introduction: The Early Years",
+      "text": "Welcome to this audio documentary on The Prodigy, covering their groundbreaking era from 1992 to 1997. We'll explore how this Essex-based group transformed from underground rave heroes into one of the most influential electronic acts of the decade..."
     },
     {
-      "song_title": "Firestarter",
-      "approximate_year": "1996",
-      "why_essential": "Mainstream crossover moment, controversial punk-rave fusion",
-      "narrative_role": "Peak - commercial breakthrough"
+      "type": "narration",
+      "title": "Breakthrough Moment",
+      "text": "In 1992, The Prodigy released 'Charly', a track that would define the early rave sound. Built around a sample from a 1970s public information film, the song captured the playful yet rebellious spirit of the emerging rave scene..."
+    },
+    {
+      "type": "song",
+      "title": "Charly",
+      "artist": "The Prodigy",
+      "album": "Experience",
+      "year": "1992",
+      "youtube_hint": "official audio"
+    },
+    {
+      "type": "narration",
+      "title": "Mainstream Crossover",
+      "text": "By 1996, The Prodigy had evolved dramatically. 'Firestarter' marked their explosive crossover into mainstream consciousness, blending punk attitude with breakbeat fury..."
+    },
+    {
+      "type": "song",
+      "title": "Firestarter",
+      "artist": "The Prodigy",
+      "album": "The Fat of the Land",
+      "year": "1996",
+      "youtube_hint": "official video"
     }
-    // ... 3 more tracks
+    // ... 3 more narration/song pairs
   ]
 }
 ```
 
-The client searches YouTube for the selected song titles/artists and picks the best match.
+The server automatically searches YouTube for each song and maps it to the best matching video.
 
-## Customizing the Default Playlist
+## Customization
 
-To customize defaults, adjust playlist building logic in `public/player.js`. You can add local MP3 narration, tweak mapping, or change UI behavior.
+You can customize the documentary generation by:
+- Adjusting the AI prompts in `src/prompts/musicDoc/`
+- Modifying the TTS voice and speed in `.env`
+- Changing the narration segment length in the UI (30s, 1min, 3min, or 5min)
+- Adding custom instructions when generating a documentary
 
 ### Keyboard Shortcuts
 
@@ -157,30 +169,93 @@ To customize defaults, adjust playlist building logic in `public/player.js`. You
 
 ## Troubleshooting
 
-- **YouTube player not initializing**: Ensure the YouTube IFrame API can load and try a normal refresh.
-- **CORS**: Serve from `http://localhost:8888` (default) or configure your reverse proxy accordingly.
-- **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration.
+- **YouTube player not initializing**: Ensure the YouTube IFrame API can load and try a normal refresh
+- **CORS errors**: Serve from `http://localhost:8888` (default) or configure your reverse proxy accordingly
+- **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration
+- **YouTube search not finding songs**: The app uses web scraping which may occasionally fail if YouTube changes their structure
 
-## Design Notes
+## Architecture Overview
 
-- **Routing**: The app serves a single YouTube player on `/`.
-- **SDK Loading**: Only the YouTube IFrame API is loaded on the client.
-- **Persistence**: Playlists saved to `data/playlists/*.json`. Each record includes YouTube mapping data per song.
-- **Owners**: Saved playlists use `ownerId: "anonymous"` by default.
+Music Story is built as a modular Express.js application with a clean separation between frontend and backend concerns.
+
+### Backend Architecture
+
+**Core Components:**
+
+- **`src/server.js`** - Application entry point, initializes directories and starts Express server
+- **`src/app.js`** - Express app configuration, middleware setup, and route mounting
+- **`src/config.js`** - Centralized configuration management from environment variables
+
+**Services Layer** (`src/services/`):
+
+- **`musicDoc.js`** - Generates documentary outlines using OpenAI's structured output API (gpt-5-mini with reasoning)
+- **`tts.js`** - Converts narration text to speech using OpenAI TTS API with customizable voice/speed
+- **`youtubeMap.js`** - Maps songs to YouTube videos using `youtube-sr` web scraping (no API key needed)
+- **`jobManager.js`** - In-memory job queue with SSE progress streaming, handles concurrent generation requests
+- **`storage.js`** - Playlist persistence to JSON files in `data/playlists/`
+- **`openaiClient.js`** - Configured OpenAI SDK client instance
+
+**Routes** (`src/routes/`):
+
+- **`musicDocLite.js`** - POST `/api/music-doc-lite` - Generate documentary outline
+- **`tts.js`** - POST `/api/tts-batch` - Batch TTS generation for narration segments
+- **`youtube.js`** - POST `/api/youtube-map` - Map songs to YouTube videos
+- **`playlists.js`** - CRUD operations for saved playlists
+- **`jobs.js`** - SSE endpoint for real-time generation progress
+- **`configRoute.js`** - Serves client configuration (debug flags, etc.)
+
+**Utilities** (`src/utils/`):
+
+- **`promptLoader.js`** - Loads and fills prompt templates from `src/prompts/`
+- **`logger.js`** - Debug logging utilities (controlled by `SERVER_DEBUG` env var)
+
+### Frontend Architecture
+
+**Single-Page Application** (`public/`):
+
+- **`index.html`** - Main UI with documentary generation form, playlist viewer, and YouTube player
+- **`player.js`** - Client-side player logic (~1680 lines):
+  - YouTube IFrame API integration for music playback
+  - HTML5 Audio element for narration MP3s
+  - Playlist management and track sequencing
+  - Progress tracking and UI updates
+  - Keyboard shortcuts (Space, Ctrl+arrows)
+- **`styles.css`** - Responsive styling with dark/light theme support
+- **`config.js`** - Dynamic client config served by backend
+
+### Data Flow
+
+1. **User Input** → Client sends topic + optional instructions to `/api/music-doc-lite`
+2. **LLM Generation** → `musicDoc.js` calls OpenAI with structured schema, returns timeline with narration segments and 5 songs
+3. **YouTube Mapping** → Server automatically maps songs to YouTube videos via `youtubeMap.js`
+4. **TTS Generation** → Client requests batch TTS for narration segments via `/api/tts-batch`
+5. **Playlist Assembly** → Client builds interleaved playlist of narration (MP3) and music (YouTube) tracks
+6. **Playback** → YouTube IFrame Player handles music, HTML5 Audio handles narration
+7. **Persistence** → Playlist saved to `data/playlists/{id}.json` with shareable URL
+
+### Key Design Decisions
+
+- **No Authentication**: Uses anonymous user model (`ownerId: "anonymous"`) for simplicity
+- **YouTube Web Scraping**: Avoids YouTube API quotas by using `youtube-sr` package
+- **Structured Output**: Uses OpenAI's JSON schema validation for reliable documentary generation
+- **In-Memory Jobs**: Job queue survives page refresh but not server restart (acceptable for demo)
+- **Mock Mode**: `MOCK_TTS=1` uses placeholder audio to save API costs during development
+- **Modular Prompts**: All AI prompts externalized to `src/prompts/` for easy iteration
 
 ---
 
 ## Environment Variables Reference
 
 - `PORT` - Server port (default: 8888)
-- `CLIENT_DEBUG`, `SERVER_DEBUG` - Enable verbose logging
-- `OPENAI_API_KEY` - OpenAI API key for LLM and TTS
+- `CLIENT_DEBUG` - Set to 1 to enable verbose client logs in browser console
+- `SERVER_DEBUG` - Set to 1 to enable verbose server logs
+- `OPENAI_API_KEY` - OpenAI API key for LLM and TTS (required)
 - `OPENAI_TTS_MODEL` - TTS model (default: gpt-4o-mini-tts)
-- `OPENAI_TTS_VOICE` - Voice selection (alloy, echo, fable, onyx, nova, shimmer)
-- `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.0)
-- `TTS_OUTPUT_DIR` - Where to save generated MP3s
+- `OPENAI_TTS_VOICE` - Voice selection: alloy, echo, fable, onyx, nova, shimmer (default: nova)
+- `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.25)
 - `MOCK_TTS` - Set to 1 to use placeholder MP3s instead of OpenAI (saves costs during development)
-- `YOUTUBE_API_KEY` - YouTube Data API v3 key used for mapping/search
+- `RUNTIME_DATA_DIR` - Root directory for playlists and TTS files (default: ./data)
+- `TTS_OUTPUT_DIR` - Where to save generated MP3s (default: $RUNTIME_DATA_DIR/tts)
 
 ---
 

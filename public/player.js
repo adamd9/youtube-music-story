@@ -105,32 +105,83 @@ function logMode(context) {
     }
 }
 
-// My Playlists rendering and actions
-async function refreshMyPlaylists() {
-    const ownerId = 'anonymous';
-    dbg('refreshMyPlaylists: owner', ownerId);
+// Local Storage Management for User's Own Playlists
+const LOCAL_STORAGE_KEY = 'musicStoryMyPlaylists';
+
+function getMyPlaylistsFromStorage() {
     try {
-        // Fetch both completed playlists and active jobs
-        const [playlistsResp] = await Promise.all([
-            fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`)
-        ]);
-        
-        const playlistsJson = playlistsResp.ok ? await playlistsResp.json() : { playlists: [] };
-        const playlists = Array.isArray(playlistsJson?.playlists) ? playlistsJson.playlists : [];
-        dbg('refreshMyPlaylists: fetched', { playlists: playlists.length });
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (!stored) return [];
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        console.error('Failed to read playlists from localStorage', e);
+        return [];
+    }
+}
+
+function saveMyPlaylistToStorage(playlistId) {
+    try {
+        const existing = getMyPlaylistsFromStorage();
+        // Add to beginning if not already present
+        if (!existing.includes(playlistId)) {
+            existing.unshift(playlistId);
+            // Keep only last 50 playlists
+            const trimmed = existing.slice(0, 50);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(trimmed));
+        }
+    } catch (e) {
+        console.error('Failed to save playlist to localStorage', e);
+    }
+}
+
+function removeMyPlaylistFromStorage(playlistId) {
+    try {
+        const existing = getMyPlaylistsFromStorage();
+        const filtered = existing.filter(id => id !== playlistId);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+    } catch (e) {
+        console.error('Failed to remove playlist from localStorage', e);
+    }
+}
+
+// My Playlists rendering (from local storage)
+async function refreshMyPlaylists() {
+    dbg('refreshMyPlaylists: loading from localStorage');
+    try {
+        const myPlaylistIds = getMyPlaylistsFromStorage();
         
         if (myPlaylistsList) myPlaylistsList.innerHTML = '';
         
-        if (!playlists.length) {
+        if (!myPlaylistIds.length) {
             if (myPlaylistsEmpty) myPlaylistsEmpty.classList.remove('hidden');
             return;
         }
         
         if (myPlaylistsEmpty) myPlaylistsEmpty.classList.add('hidden');
         
-        // No jobs shown in YouTube-only mode
+        // Fetch each playlist from server
+        const playlists = [];
+        for (const id of myPlaylistIds) {
+            try {
+                const r = await fetch(`/api/playlists/${encodeURIComponent(id)}`);
+                if (r.ok) {
+                    const json = await r.json();
+                    if (json?.playlist) playlists.push(json.playlist);
+                }
+            } catch (e) {
+                console.error(`Failed to fetch playlist ${id}`, e);
+            }
+        }
         
-        // Show completed playlists
+        dbg('refreshMyPlaylists: loaded', { count: playlists.length });
+        
+        if (!playlists.length) {
+            if (myPlaylistsEmpty) myPlaylistsEmpty.classList.remove('hidden');
+            return;
+        }
+        
+        // Show playlists
         playlists.forEach(rec => {
             const li = document.createElement('li');
             const title = rec.title || '(untitled)';
@@ -153,19 +204,60 @@ async function refreshMyPlaylists() {
             });
         });
         
-        // Attach events: click job to reconnect
-        myPlaylistsList.querySelectorAll('.saved-title.job-link[data-job-id]').forEach(el => {
-            el.addEventListener('click', () => {
-                const jobId = el.getAttribute('data-job-id');
-                reconnectToJob(jobId);
-            });
-        });
-        
     } catch (e) {
         console.error('refreshMyPlaylists error', e);
         if (myPlaylistsEmpty) {
             myPlaylistsEmpty.classList.remove('hidden');
             myPlaylistsEmpty.textContent = 'Failed to load playlists.';
+        }
+    }
+}
+
+// All Playlists rendering (from server - all anonymous playlists)
+async function refreshAllPlaylists() {
+    dbg('refreshAllPlaylists: loading from server');
+    try {
+        const r = await fetch('/api/users/anonymous/playlists');
+        const json = r.ok ? await r.json() : { playlists: [] };
+        const playlists = Array.isArray(json?.playlists) ? json.playlists : [];
+        
+        if (allPlaylistsList) allPlaylistsList.innerHTML = '';
+        
+        if (!playlists.length) {
+            if (allPlaylistsEmpty) allPlaylistsEmpty.classList.remove('hidden');
+            return;
+        }
+        
+        if (allPlaylistsEmpty) allPlaylistsEmpty.classList.add('hidden');
+        
+        // Show up to 10 most recent
+        playlists.slice(0, 10).forEach(rec => {
+            const li = document.createElement('li');
+            const title = rec.title || '(untitled)';
+            const meta = rec.topic ? `(<span class="saved-meta-topic">${rec.topic}</span>)` : '';
+            li.innerHTML = `
+                <div class="saved-item">
+                    <button class="saved-title as-link" data-id="${rec.id}" title="Load playlist">
+                        ${title} <span class="saved-meta">${meta}</span>
+                    </button>
+                </div>`;
+            allPlaylistsList.appendChild(li);
+        });
+        
+        // Attach events
+        allPlaylistsList.querySelectorAll('.saved-title.as-link[data-id]').forEach(el => {
+            el.addEventListener('click', async () => {
+                const id = el.getAttribute('data-id');
+                if (loadIdInput) loadIdInput.value = id;
+                if (loadIdBtn) loadIdBtn.click();
+            });
+        });
+        
+    } catch (e) {
+        console.error('refreshAllPlaylists error', e);
+        if (allPlaylistsEmpty) {
+            allPlaylistsEmpty.classList.remove('hidden');
+            allPlaylistsEmpty.textContent = 'Failed to load playlists.';
         }
     }
 }
@@ -190,7 +282,17 @@ async function saveGeneratedPlaylist(doc, ownerId) {
         });
         if (!r.ok) return null;
         const json = await r.json();
-        return json?.playlist || null;
+        const playlist = json?.playlist || null;
+        
+        // Save to local storage for "My Playlists"
+        if (playlist && playlist.id) {
+            saveMyPlaylistToStorage(playlist.id);
+            // Refresh both lists
+            refreshMyPlaylists();
+            refreshAllPlaylists();
+        }
+        
+        return playlist;
     } catch (e) {
         console.error('saveGeneratedPlaylist error', e);
         return null;
@@ -391,6 +493,8 @@ const loadIdBtn = document.getElementById('load-id-btn');
 const shareBtn = document.getElementById('share-btn');
 const myPlaylistsList = document.getElementById('my-playlists-list');
 const myPlaylistsEmpty = document.getElementById('my-playlists-empty');
+const allPlaylistsList = document.getElementById('all-playlists-list');
+const allPlaylistsEmpty = document.getElementById('all-playlists-empty');
 const refreshMyPlaylistsBtn = document.getElementById('refresh-my-playlists');
 const docSpinner = document.getElementById('doc-spinner');
 const docSpinnerText = document.getElementById('doc-spinner-text');
@@ -1037,8 +1141,11 @@ function showError(message) {
 document.addEventListener('DOMContentLoaded', async () => {
     // Apply initial layout
     applyModeLayoutVisibility();
-    // Refresh playlists for anonymous owner
-    try { await refreshMyPlaylists(); } catch {}
+    // Refresh both playlist lists
+    try { 
+        await refreshMyPlaylists(); 
+        await refreshAllPlaylists();
+    } catch {}
     
     // Set up keyboard shortcuts (ignore when typing in inputs/textareas/contenteditable)
     document.addEventListener('keydown', (e) => {
@@ -1423,17 +1530,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
 
     // If no explicit playlistId:
-    // 1) If the user has at least one playlist, load their latest
-    // 2) Else, load env-configured initial playlist (server returns from runtime data)
+    // 1) If user has playlists in localStorage (returning user), load their latest
+    // 2) Else (new user), load the latest anonymous playlist from server
     try {
         const params = new URLSearchParams(window.location.search);
         const pid = params.get('playlistId');
         if (!pid) {
             let loaded = false;
-            let ownerId = 'anonymous';
-            if (ownerId) {
+            
+            // Check if user has their own playlists in localStorage
+            const myPlaylistIds = getMyPlaylistsFromStorage();
+            
+            if (myPlaylistIds.length > 0) {
+                // Returning user - load their latest playlist
+                const latestId = myPlaylistIds[0];
                 try {
-                    const lr = await fetch(`/api/users/${encodeURIComponent(ownerId)}/playlists`);
+                    const r = await fetch(`/api/playlists/${encodeURIComponent(latestId)}`);
+                    if (r.ok) {
+                        const json = await r.json();
+                        const pl = json?.playlist;
+                        if (pl && Array.isArray(pl.timeline)) {
+                            try {
+                                if (docTitleDisplay) docTitleDisplay.textContent = pl?.title || '-';
+                                if (docTopicDisplay) docTopicDisplay.textContent = pl?.topic || '-';
+                                if (docSummaryDisplay) docSummaryDisplay.textContent = pl?.summary || '-';
+                            } catch {}
+                            try {
+                                if (docOutputEl) docOutputEl.textContent = JSON.stringify(pl, null, 2);
+                                if (docRawDetails) docRawDetails.classList.remove('hidden');
+                            } catch {}
+                            buildPlaylistFromDoc(pl);
+                            if (pl.id) state.loadedPlaylistId = pl.id;
+                            loaded = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to load user\'s latest playlist', e);
+                }
+            }
+            
+            if (!loaded) {
+                // New user - load latest anonymous playlist from server
+                try {
+                    const lr = await fetch('/api/users/anonymous/playlists');
                     if (lr.ok) {
                         const ljson = await lr.json();
                         const list = Array.isArray(ljson?.playlists) ? ljson.playlists : [];
@@ -1455,37 +1594,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                         }
                     }
-                } catch {}
-            }
-
-            if (!loaded) {
-                // Fall back to env-configured initial (may be empty)
-                const r = await fetch('/api/initial-playlist');
-                if (r.ok) {
-                    const json = await r.json();
-                    const initId = json?.id || (json?.playlist && json.playlist.id);
-                    const pl = json?.playlist;
-                    if (pl && Array.isArray(pl.timeline)) {
-                        try {
-                            if (docTitleDisplay) docTitleDisplay.textContent = pl?.title || '-';
-                            if (docTopicDisplay) docTopicDisplay.textContent = pl?.topic || '-';
-                            if (docSummaryDisplay) docSummaryDisplay.textContent = pl?.summary || '-';
-                        } catch {}
-                        try {
-                            if (docOutputEl) docOutputEl.textContent = JSON.stringify(pl, null, 2);
-                            if (docRawDetails) docRawDetails.classList.remove('hidden');
-                        } catch {}
-                        buildPlaylistFromDoc(pl);
-                        if (initId) state.loadedPlaylistId = initId;
-                    } else {
-                        showEmptyState('No default playlist configured. Generate an outline or import one to begin.');
-                    }
-                } else {
-                    showEmptyState('No default playlist configured. Generate an outline or import one to begin.');
+                } catch (e) {
+                    console.error('Failed to load latest anonymous playlist', e);
                 }
             }
+            
+            if (!loaded) {
+                showEmptyState('No playlists yet. Generate an outline to begin!');
+            }
         }
-    } catch {}
+    } catch (e) {
+        console.error('Auto-load error', e);
+    }
 
     // (removed duplicate My Playlists rendering block)
 

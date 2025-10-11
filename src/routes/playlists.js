@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { savePlaylist, getPlaylist, listPlaylistsByOwner, updatePlaylist } = require('../services/storage');
 const { mapTimelineToYouTube } = require('../services/youtubeMap');
-const { getInitialPlaylist } = require('../services/initialPlaylist');
 const { dbg, truncate } = require('../utils/logger');
 
 // Create/save a generated playlist record
@@ -73,18 +72,6 @@ router.patch('/api/playlists/:id', async (req, res) => {
   } catch (e) {
     console.error('update playlist error', e);
     return res.status(500).json({ error: 'Failed to update playlist' });
-  }
-});
-
-// Return initial playlist to load by default on the client
-router.get('/api/initial-playlist', async (_req, res) => {
-  try {
-    const { id, playlist } = await getInitialPlaylist();
-    if (!playlist) return res.status(404).json({ error: 'Initial playlist not found', id });
-    return res.json({ ok: true, id, playlist });
-  } catch (e) {
-    console.error('initial playlist error', e);
-    return res.status(500).json({ error: 'Failed to fetch initial playlist' });
   }
 });
 

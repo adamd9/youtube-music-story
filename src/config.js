@@ -19,11 +19,6 @@ const config = {
   port: parseInt(process.env.PORT || '8888', 10),
   clientDebug: process.env.CLIENT_DEBUG === '1' || process.env.DEBUG === '1',
   serverDebug: process.env.SERVER_DEBUG === '1' || process.env.DEBUG === '1',
-  initialPlaylistId: (process.env.INITIAL_PLAYLIST_ID || '').trim(),
-  youtube: {
-    apiKey: process.env.YOUTUBE_API_KEY || '',
-    searchMethod: (process.env.YOUTUBE_SEARCH_METHOD || 'scrape').toLowerCase(),
-  },
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     ttsModel: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',

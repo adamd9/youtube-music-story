@@ -12,7 +12,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Music Story <span style="font-size: 0.6em; color: var(--text-secondary);">(YouTube)</span></h1>
+            <h1>Music Story</h1>
             <p>Transform any artist or music topic into an immersive audio documentary with AI-narrated context and perfectly curated tracks</p>
             <div class="header-actions">
                 <button id="theme-toggle-btn" class="icon-btn" title="Toggle Dark/Light Mode">🌓</button>
@@ -54,10 +54,16 @@
                 </div>
                 <div class="dashboard-col">
                     <div id="my-playlists" class="section">
-                        <h2>Playlists Generated</h2>
-                        <p>Listen to yours and others' generated playlists!</p>
+                        <h2>My Playlists</h2>
+                        <p>Your generated playlists (stored locally)</p>
                         <ul id="my-playlists-list" class="playlist-list"></ul>
-                        <div id="my-playlists-empty" class="note">No generated playlists yet.</div>
+                        <div id="my-playlists-empty" class="note">No playlists yet. Generate one to get started!</div>
+                    </div>
+                    <div id="all-playlists" class="section" style="margin-top: 16px;">
+                        <h2>Recent Community Playlists</h2>
+                        <p>Latest playlists from all users</p>
+                        <ul id="all-playlists-list" class="playlist-list"></ul>
+                        <div id="all-playlists-empty" class="note">No community playlists yet.</div>
                     </div>
                 </div>
             </div>
