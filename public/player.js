@@ -226,7 +226,7 @@ async function generateTTSForDoc(doc, playlistId) {
         }
 
         dbg('generateTTSForDoc: requesting TTS batch', { count: texts.length });
-        try { if (docStatusEl) docStatusEl.textContent = `Generating narration tracks (${texts.length})…`; } catch {}
+        try { if (docStatusEl) docStatusEl.textContent = `Generating ${texts.length} narration tracks (this may take a minute)…`; } catch {}
         const resp = await fetch('/api/tts-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -243,6 +243,7 @@ async function generateTTSForDoc(doc, playlistId) {
         const json = await resp.json();
         const urls = Array.isArray(json?.urls) ? json.urls : [];
         dbg('generateTTSForDoc: received urls', { total: urls.length });
+        try { if (docStatusEl) docStatusEl.textContent = `Narration complete (${urls.length} tracks)…`; } catch {}
 
         let i = 0;
         for (const target of targets) {
@@ -1225,6 +1226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let data = await resp.json();
 
                 // 1) Save immediately to get a playlistId for TTS filenames and share
+                try { if (docStatusEl) docStatusEl.textContent = 'Mapping YouTube videos (1/3)…'; } catch {}
                 const ownerId = 'anonymous';
                 const save = await fetch('/api/playlists', {
                     method: 'POST',
@@ -1280,10 +1282,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 // 2) Generate TTS (mock or real) and attach to doc
-                try { if (docStatusEl) docStatusEl.textContent = 'Generating narration…'; } catch {}
+                try { if (docStatusEl) docStatusEl.textContent = 'Generating narration (2/3)…'; } catch {}
                 data = await generateTTSForDoc(data, pid);
 
                 // 3) Build UI from updated doc (with tts_url)
+                try { if (docStatusEl) docStatusEl.textContent = 'Finalizing (3/3)…'; } catch {}
                 buildFromDoc(data);
 
                 // 4) Persist TTS URLs back to saved playlist
