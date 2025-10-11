@@ -14,9 +14,9 @@ No login required—just enter an artist or music topic and get an instant audio
 
 ## Why I Built This
 
-I made this project for **me**. 
+I made this project for **me**.
 
-Spotify recently changed their policies and stopped allowing podcast creators to use music tracks in their shows. This killed a podcast I absolutely loved—one that didn't just play music, but told the *stories* behind it. The bands, the people, the history. I love exploring new music, but what I love even more is learning the context: who made it, why they made it, what was happening in their lives.
+Spotify changed their policies and stopped allowing podcast creators to use music tracks in their shows (the *Music + Talk* feature). This killed a podcast I absolutely loved—one that didn't just play music, but told the *stories* behind it. The bands, the people, the history. I love exploring new music, but what I love even more is learning the context: who made it, why they made it, what was happening in their lives.
 
 So I built this. It's a personal project that lets me keep doing what that podcast did—discover music and dive into its story—using the power of AI. No platform restrictions, no gatekeepers. Just music, history, and the stories that make it all meaningful.
 
@@ -154,6 +154,7 @@ The server automatically searches YouTube for each song and maps it to the best 
 ## Customization
 
 You can customize the documentary generation by:
+
 - Adjusting the AI prompts in `src/prompts/musicDoc/`
 - Modifying the TTS voice and speed in `.env`
 - Changing the narration segment length in the UI (30s, 1min, 3min, or 5min)
