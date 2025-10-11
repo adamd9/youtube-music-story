@@ -504,6 +504,10 @@ const docRawDetails = document.getElementById('doc-raw');
 const docTitleDisplay = document.getElementById('doc-title');
 const docTopicDisplay = document.getElementById('doc-topic-display');
 const docSummaryDisplay = document.getElementById('doc-summary');
+// Playlist header in player
+const playlistHeader = document.getElementById('playlist-header');
+const playlistTitleDisplay = document.getElementById('playlist-title-display');
+const playlistTopicDisplay = document.getElementById('playlist-topic-display');
 // Import modal elements
 const importOpenBtn = document.getElementById('import-open-btn');
 const importModal = document.getElementById('import-modal');
@@ -736,6 +740,16 @@ function buildPlaylistFromDoc(doc) {
         state.startedTrackIndex = -1; // nothing played yet
         renderPlaylist();
         setPlayerSectionsVisible(true);
+        
+        // Show playlist title in player header
+        if (playlistHeader && playlistTitleDisplay && playlistTopicDisplay) {
+            const title = doc.title || 'Music Documentary';
+            const topic = doc.topic || '';
+            playlistTitleDisplay.textContent = title;
+            playlistTopicDisplay.textContent = topic;
+            playlistHeader.classList.remove('hidden');
+        }
+        
         // Try to load durations for local MP3s to show in the playlist
         preloadTrackDurations();
         updateNowPlaying({
@@ -746,6 +760,12 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
+        
+        // Auto-play the playlist
+        setTimeout(() => {
+            playTrack(0);
+        }, 500);
+        
         // Mapping is handled server-side during playlist creation
 
     } catch (e) {

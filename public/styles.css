@@ -183,6 +183,25 @@ header p {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
+/* Playlist Header */
+.playlist-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.playlist-header h3 {
+    margin: 0 0 5px 0;
+    color: var(--primary-color);
+    font-size: 1.3rem;
+}
+
+.playlist-subtitle {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
 /* Centered, fixed-width player on large screens */
 .player-wrapper {
     width: 100%;
