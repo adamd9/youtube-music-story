@@ -14,15 +14,16 @@ const jobsRoutes = require('./routes/jobs');
 const app = express();
 
 // Core middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // YouTube-only: no special redirect handling
 app.get('/', (_req, _res, next) => next());
 
 // Static files
 app.use(express.static(config.paths.publicDir));
-// Serve TTS output directory at /tts even if stored outside publicDir
+// Serve TTS output directory and album art even if stored outside publicDir
 app.use('/tts', express.static(config.paths.ttsOutputDir));
+app.use('/album-art', express.static(config.paths.albumArtDir));
 
 // Mount routes
 app.use(configRoute);

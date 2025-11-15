@@ -254,6 +254,7 @@ Music Story is built as a modular Express.js application with a clean separation
 - `OPENAI_TTS_MODEL` - TTS model (default: gpt-4o-mini-tts)
 - `OPENAI_TTS_VOICE` - Voice selection: alloy, echo, fable, onyx, nova, shimmer (default: nova)
 - `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.25)
+- `OPENAI_IMAGE_MODEL` - Image generation model for narration album art (default: gpt-image-1)
 - `MOCK_TTS` - Set to 1 to use placeholder MP3s instead of OpenAI (saves costs during development)
 - `RUNTIME_DATA_DIR` - Root directory for playlists and TTS files (default: ./data)
 - `TTS_OUTPUT_DIR` - Where to save generated MP3s (default: $RUNTIME_DATA_DIR/tts)

@@ -24,6 +24,7 @@ const config = {
     ttsModel: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
     ttsVoice: process.env.OPENAI_TTS_VOICE || 'alloy',
     ttsSpeed: parseFloat(process.env.OPENAI_TTS_SPEED || '1.0'),
+    imageModel: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
   },
   features: {
     mockTts: process.env.MOCK_TTS === '1',
@@ -31,7 +32,8 @@ const config = {
   paths: {
     publicDir: path.join(__dirname, '..', 'public'),
     dataDir,
-    ttsOutputDir: ttsDir
+    ttsOutputDir: ttsDir,
+    albumArtDir: path.join(dataDir, 'album-art')
   }
 };
 

@@ -8,7 +8,7 @@ const { dbg, truncate } = require('../utils/logger');
 // body: { ownerId: string, title: string, topic: string, summary: string, timeline: array, source?: 'youtube' }
 router.post('/api/playlists', async (req, res) => {
   try {
-    const { ownerId, title, topic, summary, timeline, source } = req.body || {};
+    const { ownerId, title, topic, summary, timeline, source, narrationAlbumArtUrl } = req.body || {};
     if (!ownerId || !title || !Array.isArray(timeline)) {
       return res.status(400).json({ error: 'ownerId, title and timeline are required' });
     }
@@ -26,7 +26,15 @@ router.post('/api/playlists', async (req, res) => {
         return res.status(500).json({ error: 'YouTube mapping failed on server', details: e.message });
       }
     }
-    const rec = await savePlaylist({ ownerId, title, topic, summary, timeline: timelineToSave, source });
+    const rec = await savePlaylist({
+      ownerId,
+      title,
+      topic,
+      summary,
+      timeline: timelineToSave,
+      source,
+      narrationAlbumArtUrl
+    });
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
     console.error('save playlist error', e);

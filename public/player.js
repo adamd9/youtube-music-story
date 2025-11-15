@@ -636,6 +636,7 @@ function buildPlaylistFromDoc(doc) {
         // persist the raw doc so we can PATCH mappings later
         state.lastDoc = doc || null;
         const newPlaylist = [];
+        const narrationAlbumArt = (doc && (doc.narrationAlbumArtUrl || doc.narration_album_art_url)) || null;
 
         if (doc && Array.isArray(doc.timeline)) {
             // New format: single interleaved timeline array
@@ -650,12 +651,18 @@ function buildPlaylistFromDoc(doc) {
                         return; // skip adding this narration segment
                     }
                     const narrationTitle = entry.title || `Narration ${narrationCount}`;
+                    const entryAlbumArt = entry.albumArt
+                        || entry.album_art
+                        || entry.albumArtUrl
+                        || entry.album_art_url
+                        || narrationAlbumArt
+                        || DEFAULT_ALBUM_ART;
                     newPlaylist.push({
                         type: 'mp3',
                         id: `narration-${narrationCount - 1}`,
                         name: narrationTitle,
                         artist: 'Narrator',
-                        albumArt: DEFAULT_ALBUM_ART,
+                        albumArt: entryAlbumArt,
                         duration: 0,
                         url: ttsUrl,
                         narrationText: entry.text || ''
@@ -701,12 +708,18 @@ function buildPlaylistFromDoc(doc) {
                         return; // skip adding this narration segment
                     }
                     const narrationTitle = seg.title || `Narration ${item.narration_index + 1}`;
+                    const segAlbumArt = seg.albumArt
+                        || seg.album_art
+                        || seg.albumArtUrl
+                        || seg.album_art_url
+                        || narrationAlbumArt
+                        || DEFAULT_ALBUM_ART;
                     newPlaylist.push({
                         type: 'mp3',
                         id: `narration-${item.narration_index}`,
                         name: narrationTitle,
                         artist: 'Narrator',
-                        albumArt: DEFAULT_ALBUM_ART,
+                        albumArt: segAlbumArt,
                         duration: 0,
                         url: ttsUrl,
                         narrationText: seg.text
@@ -1364,7 +1377,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         topic: data?.topic || topic,
                         summary: data?.summary || '',
                         timeline: Array.isArray(data?.timeline) ? data.timeline : [],
-                        source: 'youtube'
+                        source: 'youtube',
+                        narrationAlbumArtUrl: data?.narrationAlbumArtUrl || null
                     })
                 });
                 if (!save.ok) {
@@ -1395,6 +1409,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         data.topic = saved.playlist.topic || data.topic;
                         data.summary = saved.playlist.summary || data.summary;
                         data.timeline = saved.playlist.timeline;
+                        data.narrationAlbumArtUrl = saved.playlist.narrationAlbumArtUrl || data.narrationAlbumArtUrl || null;
                         // Keep a copy as our source of truth for later PATCH
                         state.lastDoc = saved.playlist;
                     } catch {}

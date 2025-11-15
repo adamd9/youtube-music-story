@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const { generateMusicDoc } = require('../services/musicDoc');
+const { generateNarrationAlbumArt } = require('../services/albumArt');
 const { dbg } = require('../utils/logger');
 
 // Lightweight documentary generation (YouTube-only app).
@@ -16,13 +17,20 @@ router.post('/api/music-doc-lite', async (req, res) => {
       return res.status(400).json({ error: 'Missing required field: topic (string)' });
     }
 
-    // Directly generate using LLM
-    const data = await generateMusicDoc({
+    // Fire LLM + album art generation in parallel
+    const docPromise = generateMusicDoc({
       topic,
       prompt,
       catalog: [],
       narrationTargetSecs
     });
+    const artPromise = generateNarrationAlbumArt({ topic });
+
+    const [data, artResult] = await Promise.all([docPromise, artPromise]);
+
+    if (artResult && data && Array.isArray(data.timeline)) {
+      data.narrationAlbumArtUrl = artResult.publicUrl || artResult.dataUrl;
+    }
 
     dbg('music-doc-lite: generated', { topic, segments: Array.isArray(data?.timeline) ? data.timeline.length : 0 });
     return res.json(data);

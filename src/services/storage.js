@@ -14,11 +14,21 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-async function savePlaylist({ ownerId, title, topic, summary, timeline, source }) {
+async function savePlaylist({ ownerId, title, topic, summary, timeline, source, narrationAlbumArtUrl }) {
   await ensureDirs();
   const id = genId();
   const createdAt = new Date().toISOString();
-  const record = { id, ownerId, title, topic, summary, timeline, source: source || null, createdAt };
+  const record = {
+    id,
+    ownerId,
+    title,
+    topic,
+    summary,
+    timeline,
+    source: source || null,
+    narrationAlbumArtUrl: narrationAlbumArtUrl || null,
+    createdAt
+  };
   const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);
   // Atomic write: write to a unique temp file then rename
   const tmpPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;

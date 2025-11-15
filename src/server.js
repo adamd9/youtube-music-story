@@ -9,6 +9,7 @@ async function startup() {
     try { await fsp.mkdir(config.paths.dataDir, { recursive: true }); } catch {}
     try { await fsp.mkdir(path.join(config.paths.dataDir, 'playlists'), { recursive: true }); } catch {}
     try { await fsp.mkdir(config.paths.ttsOutputDir, { recursive: true }); } catch {}
+    try { await fsp.mkdir(config.paths.albumArtDir, { recursive: true }); } catch {}
 
     // Debug: print effective configuration paths and key envs
     console.log('[CFG] env:', config.env);
@@ -18,6 +19,7 @@ async function startup() {
     console.log('[CFG] ttsOutputDir:', config.paths.ttsOutputDir);
     console.log('[CFG] features.mockTts:', config.features.mockTts);
     console.log('[CFG] openai.ttsModel:', config.openai.ttsModel, 'voice:', config.openai.ttsVoice);
+    console.log('[CFG] albumArtDir:', config.paths.albumArtDir);
     console.log('[ENV] RUNTIME_DATA_DIR:', process.env.RUNTIME_DATA_DIR || '(unset)');
     console.log('[ENV] TTS_OUTPUT_DIR:', process.env.TTS_OUTPUT_DIR || '(unset)');
   } catch (e) {
