@@ -24,7 +24,7 @@ async function runYouTubeDocJob(jobId, params) {
     });
 
     const [doc, artResult] = await Promise.all([
-      generateMusicDoc({ topic, prompt, catalog: [], narrationTargetSecs }),
+      generateMusicDoc({ topic, prompt, narrationTargetSecs }),
       generateNarrationAlbumArt({ topic }),
     ]);
 

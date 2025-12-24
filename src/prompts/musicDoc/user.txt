@@ -2,5 +2,3 @@ Topic: {{TOPIC}}
 Narration segment target length: {{NARRATION_TARGET_SECS}} seconds
 
 Additional instructions: {{EXTRA}}
-
-Candidate track catalog: {{CATALOG_NOTE}}

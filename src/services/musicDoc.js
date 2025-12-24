@@ -5,7 +5,7 @@ const { loadTemplate, fillTemplate } = require('../utils/promptLoader');
 const { z } = require('zod');
 const { zodResponseFormat } = require('openai/helpers/zod');
 
-async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs }) {
+async function generateMusicDoc({ topic, prompt, narrationTargetSecs }) {
   // Define Zod schema for structured output
   const MusicDocSchema = z.object({
     title: z.string(),
@@ -35,17 +35,11 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
   const extra = prompt && typeof prompt === 'string' && prompt.trim().length > 0
     ? `\n\nAdditional instructions from user (apply carefully):\n${prompt.trim()}`
     : '';
-  let catalogNote = '';
-  if (Array.isArray(catalog) && catalog.length > 0) {
-    const trimmed = catalog.map(t => ({ name: t.name, artist: t.artist, album: t.album, release_date: t.release_date, duration_ms: t.duration_ms })).slice(0, 500);
-    catalogNote = `\n\nCandidate track catalog (choose ONLY from these if selecting songs):\n${JSON.stringify(trimmed, null, 2)}`;
-  }
 
   const targetSecs = Number.isFinite(narrationTargetSecs) && narrationTargetSecs > 0 ? Math.floor(narrationTargetSecs) : 30;
   const userPrompt = fillTemplate(userTpl, {
     TOPIC: topic,
     EXTRA: (extra || '').trim(),
-    CATALOG_NOTE: (catalogNote || '').trim(),
     NARRATION_TARGET_SECS: String(targetSecs)
   });
 
@@ -53,7 +47,6 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
     model: 'gpt-4.1',
     instructionsPreview: truncate(systemPrompt, 400),
     inputPreview: truncate(userPrompt, 400),
-    catalogCount: Array.isArray(catalog) ? catalog.length : 0
   });
 
   const openaiRequest = {

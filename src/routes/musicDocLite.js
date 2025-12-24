@@ -21,7 +21,6 @@ router.post('/api/music-doc-lite', async (req, res) => {
     const docPromise = generateMusicDoc({
       topic,
       prompt,
-      catalog: [],
       narrationTargetSecs
     });
     const artPromise = generateNarrationAlbumArt({ topic });
