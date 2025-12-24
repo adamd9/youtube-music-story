@@ -1,4 +1,5 @@
 const openai = require('./openaiClient');
+const config = require('../config');
 const { dbg, truncate } = require('../utils/logger');
 const { loadTemplate, fillTemplate } = require('../utils/promptLoader');
 const { z } = require('zod');
@@ -55,16 +56,29 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
     catalogCount: Array.isArray(catalog) ? catalog.length : 0
   });
 
-  const completion = await openai.chat.completions.parse({
+  const openaiRequest = {
     model: 'gpt-4.1',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ],
     response_format: zodResponseFormat(MusicDocSchema, 'music_documentary'),
-  });
+  };
+
+  const completion = await openai.chat.completions.parse(openaiRequest);
 
   const data = completion.choices[0].message.parsed;
+  if (config && config.serverDebug) {
+    const safeOpenaiRequest = {
+      model: openaiRequest.model,
+      messages: openaiRequest.messages,
+      response_format: {
+        type: 'zodResponseFormat',
+        name: 'music_documentary'
+      }
+    };
+    data._debug = { ...(data._debug || {}), openai_request: safeOpenaiRequest };
+  }
   dbg('music-doc: parsed response', { title: data?.title, items: data?.timeline?.length });
   return data;
 }

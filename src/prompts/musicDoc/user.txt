@@ -1,53 +1,6 @@
 Topic: {{TOPIC}}
+Narration segment target length: {{NARRATION_TARGET_SECS}} seconds
 
-Structural goals:
-- Provide a short, human-friendly playlist title and place it in the `title` field.
-- Provide a brief, compelling summary that reads like the lead-in to a great audio documentary.
-- Pick exactly five songs that best represent the topic’s narrative arc.
-- Build a single interleaved `timeline` array mixing narration and songs, strictly alternating as a documentary would.
-- The FIRST timeline item MUST be a narration segment that:
-  - Introduces that this is a short audio documentary.
-  - Names the artist or band and clearly states the time period or scope being covered.
-  - Sets expectations for what the listener will learn or hear.
-- BEFORE EACH SONG, include a narration segment that:
-  - Introduces the song by title and year, and makes it clear the track is about to play.
-  - Provides concise historical context: what was happening with the band, key members, the wider scene, or the production at that moment, and why the track matters.
-  - Delves into the production and recording of the song, including interesting studio details, anecdotes, or band member stories where relevant.
+Additional instructions: {{EXTRA}}
 
-Timing preference (strictly follow):
-- Each narration segment should be approximately {{NARRATION_TARGET_SECS}} seconds of spoken content.
-- Keep narration concise but vivid; adjust sentence count and pacing to match the target time.
-- Aim within plus or minus ten percent of the target per segment.
-- Tighten or split phrasing as needed while preserving clarity, tone, and chronology.
-
-Catalog rules:
-- If a catalog is provided, select songs ONLY from it.
-- For each song, include accurate `title` and `artist`.
-- Optionally include a concise `youtube_hint` to help locate the correct version, such as year, mix, or other disambiguation details.
-
-Text / Narration sections:
-- Output as natural, conversational spoken word — this should sound like someone talking, not reading a script or performing an audiobook.
-- US regional dialect, african-american, new york based.
-- Write as if thinking out loud behind the mic: relaxed, human, slightly imperfect.
-- Ensure the entire narrative flows strictly in chronological order.
-- You’re a Manc music head — storyteller, bit of a troublemaker, total legend behind the mic.
-- Confident but warm. Knows the history, but never lectures.
-- Talks like you’re chatting to one listener at a time.
-- Use short, uneven sentence lengths. Fragments are fine.
-- Let thoughts breathe. Use ellipses (…) or em dashes (—) for natural pauses.
-- Allow light conversational texture:
-  - occasional “you know”, “kind of”, “I mean”, “yeah”, “right?”
-  - very sparing “um” or “uh”, only where a real human would hesitate
-  - never stack fillers or overuse them
-- Let sentences sometimes trail or soften rather than ending cleanly.
-- Use contractions and casual phrasing. Avoid formal or literary language.
-- It’s okay to lightly repeat or rephrase a word for emphasis, the way people do when talking.
-- Maintain an unhurried, present energy — comfortable with silence, pacing, and letting moments land.
-- Avoid symbols, shorthand, or formatting that a voice engine might mispronounce.
-- Do not use stage directions, brackets, or audio cues.
-- The output must sound correct and natural when read exactly as written by a text-to-speech engine, with no interpretation required.
-
-
-{{EXTRA}}
-
-{{CATALOG_NOTE}}
+Candidate track catalog: {{CATALOG_NOTE}}

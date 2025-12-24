@@ -14,7 +14,7 @@ function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-async function savePlaylist({ ownerId, title, topic, summary, timeline, source, narrationAlbumArtUrl }) {
+async function savePlaylist({ ownerId, title, topic, summary, timeline, source, narrationAlbumArtUrl, _debug }) {
   await ensureDirs();
   const id = genId();
   const createdAt = new Date().toISOString();
@@ -27,6 +27,7 @@ async function savePlaylist({ ownerId, title, topic, summary, timeline, source, 
     timeline,
     source: source || null,
     narrationAlbumArtUrl: narrationAlbumArtUrl || null,
+    _debug: _debug || undefined,
     createdAt
   };
   const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);

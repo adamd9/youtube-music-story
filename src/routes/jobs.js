@@ -48,6 +48,7 @@ async function runYouTubeDocJob(jobId, params) {
       timeline: mappedTimeline,
       source: 'youtube',
       narrationAlbumArtUrl: doc?.narrationAlbumArtUrl || null,
+      _debug: doc?._debug,
     });
 
     const playlistId = playlistRecord.id;
