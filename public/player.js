@@ -773,11 +773,7 @@ function buildPlaylistFromDoc(doc) {
             position: 0,
             isPlaying: false
         });
-        
-        // Auto-play the playlist
-        setTimeout(() => {
-            playTrack(0);
-        }, 500);
+        // No autoplay: require a user gesture (click Play or choose a track)
         
         // Mapping is handled server-side during playlist creation
 
@@ -945,6 +941,11 @@ async function playTrack(index) {
     if (state.currentTrack.type === 'mp3') {
         await playLocalMP3(state.currentTrack);
     } else if (state.currentTrack.type === 'youtube') {
+        const ok = await ensureYouTubePlayerReady();
+        if (!ok) {
+            showError('YouTube player not ready. Please try again in a moment.');
+            return;
+        }
         await playYouTubeTrack(state.currentTrack);
     }
     
@@ -1010,6 +1011,14 @@ async function playLocalMP3(track) {
             } catch {}
         }
     } catch (error) {
+        // Browsers may block autoplay until the user interacts with the page.
+        const msg = (error && error.name) ? String(error.name) : '';
+        if (msg === 'NotAllowedError') {
+            try { state.isPlaying = false; } catch {}
+            updatePlayPauseButton();
+            showError('Press Play to start audio (browser requires a user interaction).');
+            return;
+        }
         console.error('Error playing MP3 (element):', error);
         showError('Failed to play MP3');
     }
@@ -1275,26 +1284,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Handle job completion
     async function handleJobComplete(result) {
         try {
-            const drafted = result?.data;
             const playlistId = result?.playlistId;
-            
-            if (!drafted || !playlistId) {
-                throw new Error('Invalid job result');
-            }
-            
-            // TTS is now generated server-side, just load the playlist
-            try { 
-                if (docStatusEl) docStatusEl.textContent = 'Loading documentary...';
-                if (docSpinnerText) docSpinnerText.textContent = 'Loading documentary...';
+            if (!playlistId) throw new Error('Invalid job result');
+
+            // Load the saved playlist record from the server (source of truth)
+            try {
+                if (docStatusEl) docStatusEl.textContent = 'Loading playlist…';
+                if (docSpinnerText) docSpinnerText.textContent = 'Loading playlist…';
             } catch {}
-            
+
+            const r = await fetch(`/api/playlists/${encodeURIComponent(playlistId)}`);
+            if (!r.ok) {
+                throw new Error(`Failed to load playlist: ${r.status}`);
+            }
+            const json = await r.json();
+            const pl = json?.playlist;
+            if (!pl || !Array.isArray(pl.timeline)) {
+                throw new Error('Invalid playlist data');
+            }
+
+            // Persist state + URL
+            state.loadedPlaylistId = playlistId;
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.set('playlistId', playlistId);
+                window.history.replaceState({}, '', u.toString());
+            } catch {}
+
             if (saveStatusEl) {
                 const shareUrl = `${window.location.origin}/player.html?playlistId=${playlistId}`;
-                saveStatusEl.textContent = `Saved as: ${drafted.title || 'Music history'} — Share ID: ${playlistId} — ${shareUrl}`;
+                saveStatusEl.textContent = `Saved as: ${pl.title || 'Music history'} — Share ID: ${playlistId} — ${shareUrl}`;
             }
-            
+
+            // Update doc meta fields in player UI
+            try {
+                if (docTitleDisplay) docTitleDisplay.textContent = pl?.title || '-';
+                if (docTopicDisplay) docTopicDisplay.textContent = pl?.topic || '-';
+                if (docSummaryDisplay) docSummaryDisplay.textContent = pl?.summary || '-';
+            } catch {}
+
+            // Populate raw and reveal
+            try {
+                if (docOutputEl) docOutputEl.textContent = JSON.stringify(pl, null, 2);
+                if (docRawDetails) docRawDetails.classList.remove('hidden');
+            } catch {}
+
             try { await refreshMyPlaylists(); } catch {}
-            buildFromDoc(drafted);
+            buildPlaylistFromDoc(pl);
         } catch (err) {
             console.error('Load failed', err);
             if (docStatusEl) docStatusEl.textContent = 'Documentary created. Check "My Playlists".';
@@ -1355,109 +1391,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             // Branch by mode first
             if (state.mode === 'youtube') {
-                // YouTube-only generation path
-                try { if (docStatusEl) docStatusEl.textContent = 'Generating outline (YouTube)…'; } catch {}
-                const resp = await fetch('/api/music-doc-lite', {
+                // YouTube-only generation path (server-side job + SSE progress)
+                try { if (docStatusEl) docStatusEl.textContent = 'Starting generation job…'; } catch {}
+                try { if (docSpinnerText) docSpinnerText.textContent = 'Starting generation job…'; } catch {}
+
+                const createResp = await fetch('/api/jobs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic, prompt, narrationTargetSecs })
                 });
-                if (!resp.ok) throw new Error(`Generation failed: ${resp.status}`);
-                let data = await resp.json();
-
-                // 1) Save immediately to get a playlistId for TTS filenames and share
-                try { if (docStatusEl) docStatusEl.textContent = 'Mapping YouTube videos (1/3)…'; } catch {}
-                const ownerId = 'anonymous';
-                const save = await fetch('/api/playlists', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ownerId,
-                        title: data?.title || `Music history: ${topic}`,
-                        topic: data?.topic || topic,
-                        summary: data?.summary || '',
-                        timeline: Array.isArray(data?.timeline) ? data.timeline : [],
-                        source: 'youtube',
-                        narrationAlbumArtUrl: data?.narrationAlbumArtUrl || null
-                    })
-                });
-                if (!save.ok) {
-                    let errMsg = 'Failed to save initial playlist';
+                if (!createResp.ok) {
+                    let errMsg = `Failed to start job: ${createResp.status}`;
                     try {
-                        const j = await save.json();
+                        const j = await createResp.json();
                         if (j && (j.error || j.details)) errMsg = `${j.error || ''} ${j.details || ''}`.trim();
                     } catch {
-                        try { errMsg = await save.text(); } catch {}
+                        try { errMsg = await createResp.text(); } catch {}
                     }
-                    const isQuota = /quota/i.test(errMsg) || /YouTube mapping failed/i.test(errMsg);
-                    if (isQuota) {
-                        if (docStatusEl) docStatusEl.textContent = 'Failed: YouTube API quota exceeded. Please try again later.';
-                        showError('YouTube API quota exceeded. Try again later.');
-                        try { if (docSpinner) docSpinner.classList.add('hidden'); } catch {}
-                        try { if (generateDocBtn) generateDocBtn.disabled = false; } catch {}
-                        state.isGeneratingDoc = false;
-                        return;
-                    }
-                    throw new Error(errMsg || 'Failed to save initial playlist');
-                }
-                const saved = await save.json();
-                const pid = saved?.playlist?.id;
-                // Use server-mapped playlist timeline going forward so YouTube fields are preserved
-                if (saved && saved.playlist && Array.isArray(saved.playlist.timeline)) {
-                    try {
-                        data.title = saved.playlist.title || data.title;
-                        data.topic = saved.playlist.topic || data.topic;
-                        data.summary = saved.playlist.summary || data.summary;
-                        data.timeline = saved.playlist.timeline;
-                        data.narrationAlbumArtUrl = saved.playlist.narrationAlbumArtUrl || data.narrationAlbumArtUrl || null;
-                        // Keep a copy as our source of truth for later PATCH
-                        state.lastDoc = saved.playlist;
-                    } catch {}
-                }
-                if (pid) {
-                    state.loadedPlaylistId = pid;
-                    try {
-                        const u = new URL(window.location.href);
-                        u.searchParams.set('playlistId', pid);
-                        window.history.replaceState({}, '', u.toString());
-                    } catch {}
+                    throw new Error(errMsg);
                 }
 
-                // 2) Generate TTS (mock or real) and attach to doc
-                try { if (docStatusEl) docStatusEl.textContent = 'Generating narration (2/3)…'; } catch {}
-                data = await generateTTSForDoc(data, pid);
+                const created = await createResp.json();
+                const jobId = created?.jobId;
+                if (!jobId) throw new Error('Job creation returned no jobId');
 
-                // 3) Build UI from updated doc (with tts_url)
-                try { if (docStatusEl) docStatusEl.textContent = 'Finalizing (3/3)…'; } catch {}
-                buildFromDoc(data);
-
-                // 4) Persist TTS URLs back to saved playlist
-                if (pid) {
-                    // Persist the latest timeline (server mapping was done on creation)
-                    const patchBody = { timeline: (state.lastDoc && Array.isArray(state.lastDoc.timeline)) ? state.lastDoc.timeline : (data?.timeline || []), source: 'youtube' };
-                    // Retry once on 404 in case of a race
-                    const doPatch = async (retry) => {
-                        const r = await fetch(`/api/playlists/${encodeURIComponent(pid)}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(patchBody)
-                        });
-                        if (!r.ok && r.status === 404 && retry) {
-                            await new Promise(res => setTimeout(res, 500));
-                            return doPatch(false);
-                        }
-                        return r;
-                    };
-                    doPatch(true).catch(() => {});
-                }
-
-                // 6) Refresh list and set share message
-                try { await refreshMyPlaylists(); } catch {}
-                if (pid && saveStatusEl) saveStatusEl.textContent = `Saved (YouTube). Share ID: ${pid} — ${window.location.origin}/player.html?playlistId=${pid}`;
-                // Update UI state
-                try { if (docSpinner) docSpinner.classList.add('hidden'); } catch {}
-                try { if (generateDocBtn) generateDocBtn.disabled = false; } catch {}
-                try { if (docStatusEl) docStatusEl.textContent = 'Ready.'; } catch {}
+                // Connect to SSE stream; completion will load playlist and rebuild UI
+                connectToJobStream(jobId);
                 return;
             }
 

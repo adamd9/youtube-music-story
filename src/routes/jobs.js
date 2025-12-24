@@ -1,8 +1,177 @@
 const express = require('express');
 const jobManager = require('../services/jobManager');
+const config = require('../config');
+const path = require('path');
+const fsp = require('fs').promises;
+const { generateMusicDoc } = require('../services/musicDoc');
+const { generateNarrationAlbumArt } = require('../services/albumArt');
+const { mapTimelineToYouTube } = require('../services/youtubeMap');
+const { savePlaylist, updatePlaylist } = require('../services/storage');
+const { ttsToMp3Buffer } = require('../services/tts');
 const { dbg } = require('../utils/logger');
 
 const router = express.Router();
+
+async function runYouTubeDocJob(jobId, params) {
+  const { topic, prompt, narrationTargetSecs } = params || {};
+  try {
+    jobManager.updateProgress(jobId, {
+      status: 'running',
+      stage: 1,
+      stageLabel: 'Generating outline',
+      progress: 5,
+      detail: 'Requesting LLM',
+    });
+
+    const [doc, artResult] = await Promise.all([
+      generateMusicDoc({ topic, prompt, catalog: [], narrationTargetSecs }),
+      generateNarrationAlbumArt({ topic }),
+    ]);
+
+    if (artResult && doc && Array.isArray(doc.timeline)) {
+      doc.narrationAlbumArtUrl = artResult.publicUrl || artResult.dataUrl;
+    }
+
+    jobManager.updateProgress(jobId, {
+      stage: 2,
+      stageLabel: 'Preparing playlist',
+      progress: 30,
+      detail: 'Mapping YouTube videos',
+    });
+
+    const mappedTimeline = await mapTimelineToYouTube(Array.isArray(doc?.timeline) ? doc.timeline : []);
+    const playlistRecord = await savePlaylist({
+      ownerId: 'anonymous',
+      title: doc?.title || (topic ? `Music history: ${topic}` : 'Music history'),
+      topic: doc?.topic || topic || '',
+      summary: doc?.summary || '',
+      timeline: mappedTimeline,
+      source: 'youtube',
+      narrationAlbumArtUrl: doc?.narrationAlbumArtUrl || null,
+    });
+
+    const playlistId = playlistRecord.id;
+
+    jobManager.updateProgress(jobId, {
+      stage: 3,
+      stageLabel: 'Generating narration',
+      progress: 70,
+      detail: 'Preparing narration tracks',
+    });
+
+    const timelineWithTts = Array.isArray(playlistRecord.timeline)
+      ? JSON.parse(JSON.stringify(playlistRecord.timeline))
+      : [];
+
+    const narrationTargets = [];
+    for (const item of timelineWithTts) {
+      if (item && item.type === 'narration' && typeof item.text === 'string' && item.text.trim().length > 0) {
+        narrationTargets.push(item);
+      }
+    }
+
+    await fsp.mkdir(config.paths.ttsOutputDir, { recursive: true });
+
+    if (config.features && config.features.mockTts) {
+      const placeholder = '/audio/voice-of-character-montervillain-expressions-132288.mp3';
+      for (let idx = 0; idx < narrationTargets.length; idx++) {
+        const progressPercent = narrationTargets.length > 0
+          ? 70 + Math.round((idx / narrationTargets.length) * 25)
+          : 95;
+        jobManager.updateProgress(jobId, {
+          stage: 3,
+          stageLabel: 'Generating narration',
+          progress: progressPercent,
+          detail: `Generating track ${idx + 1}/${narrationTargets.length}`,
+        });
+        narrationTargets[idx].tts_url = placeholder;
+      }
+    } else {
+      for (let idx = 0; idx < narrationTargets.length; idx++) {
+        const progressPercent = narrationTargets.length > 0
+          ? 70 + Math.round((idx / narrationTargets.length) * 25)
+          : 95;
+        jobManager.updateProgress(jobId, {
+          stage: 3,
+          stageLabel: 'Generating narration',
+          progress: progressPercent,
+          detail: `Generating track ${idx + 1}/${narrationTargets.length}`,
+        });
+
+        const base = `tts_${playlistId.replace(/[^a-zA-Z0-9_-]/g, '-')}_${idx}`;
+        const fileName = `${base}.mp3`;
+        const filePath = path.join(config.paths.ttsOutputDir, fileName);
+        const publicUrl = `/tts/${fileName}`;
+
+        const buf = await ttsToMp3Buffer(narrationTargets[idx].text.trim());
+        await fsp.writeFile(filePath, buf);
+        narrationTargets[idx].tts_url = publicUrl;
+      }
+    }
+
+    jobManager.updateProgress(jobId, {
+      stage: 4,
+      stageLabel: 'Finalizing',
+      progress: 96,
+      detail: 'Saving playlist',
+    });
+
+    const updatedPlaylist = await updatePlaylist(playlistId, {
+      timeline: timelineWithTts,
+      narrationAlbumArtUrl: doc?.narrationAlbumArtUrl || playlistRecord.narrationAlbumArtUrl || null,
+    });
+
+    jobManager.updateProgress(jobId, {
+      stage: 5,
+      stageLabel: 'Done',
+      progress: 100,
+    });
+
+    jobManager.completeJob(jobId, {
+      playlistId,
+      data: updatedPlaylist || { ...playlistRecord, timeline: timelineWithTts },
+    });
+  } catch (err) {
+    jobManager.failJob(jobId, err);
+  }
+}
+
+/**
+ * Create and start a new generation job
+ * POST /api/jobs
+ * body: { topic: string, prompt?: string, narrationTargetSecs?: number }
+ */
+router.post('/', async (req, res) => {
+  try {
+    if (!config.openai || !config.openai.apiKey) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY is not configured on the server.' });
+    }
+    const userId = 'anonymous';
+    const { topic, prompt, narrationTargetSecs } = req.body || {};
+    if (!topic || typeof topic !== 'string') {
+      return res.status(400).json({ error: 'Missing required field: topic (string)' });
+    }
+
+    const job = jobManager.createJob(userId, {
+      topic: topic.trim(),
+      prompt: (typeof prompt === 'string') ? prompt : undefined,
+      narrationTargetSecs,
+    });
+
+    jobManager.updateProgress(job.id, {
+      status: 'running',
+      stage: 0,
+      stageLabel: 'Queued',
+      progress: 0,
+    });
+
+    setImmediate(() => runYouTubeDocJob(job.id, job.params));
+    return res.json({ ok: true, jobId: job.id });
+  } catch (e) {
+    console.error('jobs:create error', e);
+    return res.status(500).json({ error: 'Failed to create job', details: e.message });
+  }
+});
 
 /**
  * SSE endpoint for job progress streaming
