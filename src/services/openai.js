@@ -78,13 +78,14 @@ async function generateMusicDoc({ topic, prompt, catalog }) {
     catalogCount: Array.isArray(catalog) ? catalog.length : 0
   });
 
-  const response = await openai.responses.create({
-    model: 'gpt-5-mini',
-    reasoning: { effort: 'minimal' },
-    instructions: systemPrompt,
-    input: userPrompt
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
   });
-  const text = response.output_text || '';
+  const text = response.choices[0]?.message?.content || '';
   dbg('music-doc: response output_text', truncate(text, 800));
   let data;
   try {

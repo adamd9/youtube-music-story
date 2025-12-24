@@ -1,44 +1,35 @@
 const openai = require('./openaiClient');
 const { dbg, truncate } = require('../utils/logger');
 const { loadTemplate, fillTemplate } = require('../utils/promptLoader');
+const { z } = require('zod');
+const { zodResponseFormat } = require('openai/helpers/zod');
 
 async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs }) {
-  // Single interleaved timeline schema
-  const schema = {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      title: { type: 'string' },
-      topic: { type: 'string' },
-      summary: { type: 'string' },
-      timeline: {
-        type: 'array',
-        minItems: 6,
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            type: { type: 'string', enum: ['narration', 'song'] },
-            // narration item
-            title: { type: 'string' },  // Title for both narration and song
-            text: { type: 'string' },   // Narration text
-            // song item
-            artist: { type: 'string' },
-            album: { type: 'string' },
-            year: { type: 'string' },
-            youtube_hint: { type: 'string' }
-          },
-          required: ['type']
-        }
-      }
-    },
-    required: ['title', 'topic', 'summary', 'timeline']
-  };
-  const schemaStr = JSON.stringify(schema, null, 2);
+  // Define Zod schema for structured output
+  const MusicDocSchema = z.object({
+    title: z.string(),
+    topic: z.string(),
+    summary: z.string(),
+    timeline: z.array(
+      z.object({
+        type: z.enum(['narration', 'song']),
+        title: z.string().describe('Title for both narration segments and songs'),
+        text: z.string().nullable().describe('Narration text (required for narration type, null for song)'),
+        artist: z.string().nullable().describe('Artist name (required for song type, null for narration)'),
+        album: z.string().nullable(),
+        year: z.string().nullable(),
+        youtube_hint: z.string().nullable().describe('Search hint for finding the song on YouTube')
+      })
+    ).min(6).describe('Interleaved timeline of narration and song items')
+  });
+
   // Load externalized templates
   const systemTpl = loadTemplate('prompts/musicDoc/system.txt');
   const userTpl = loadTemplate('prompts/musicDoc/user.txt');
-  const systemPrompt = fillTemplate(systemTpl, { SCHEMA: schemaStr });
+  
+  // We no longer need to inject the raw JSON schema string into the prompt text
+  // because structured outputs handles the schema enforcement.
+  const systemPrompt = fillTemplate(systemTpl, { SCHEMA: '(Structured Output Schema Enabled)' });
 
   const extra = prompt && typeof prompt === 'string' && prompt.trim().length > 0
     ? `\n\nAdditional instructions from user (apply carefully):\n${prompt.trim()}`
@@ -58,31 +49,23 @@ async function generateMusicDoc({ topic, prompt, catalog, narrationTargetSecs })
   });
 
   dbg('music-doc: request', {
-    model: 'gpt-5-mini',
+    model: 'gpt-4.1',
     instructionsPreview: truncate(systemPrompt, 400),
     inputPreview: truncate(userPrompt, 400),
     catalogCount: Array.isArray(catalog) ? catalog.length : 0
   });
 
-  const response = await openai.responses.create({
-    model: 'gpt-5-mini',
-    reasoning: { effort: 'minimal' },
-    instructions: systemPrompt,
-    input: userPrompt
+  const completion = await openai.chat.completions.parse({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    response_format: zodResponseFormat(MusicDocSchema, 'music_documentary'),
   });
-  const text = response.output_text || '';
-  dbg('music-doc: response output_text', truncate(text, 800));
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    const match = text.match(/\{[\s\S]*\}$/);
-    if (match) {
-      data = JSON.parse(match[0]);
-    } else {
-      throw e;
-    }
-  }
+
+  const data = completion.choices[0].message.parsed;
+  dbg('music-doc: parsed response', { title: data?.title, items: data?.timeline?.length });
   return data;
 }
 

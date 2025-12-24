@@ -17,13 +17,14 @@ async function normalizeArtistQuery(query) {
     userPreview: truncate(userPrompt, 300)
   });
 
-  const resp = await openai.responses.create({
-    model: 'gpt-5-mini',
-    reasoning: { effort: 'minimal' },
-    instructions: systemPrompt,
-    input: userPrompt
+  const resp = await openai.chat.completions.create({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
   });
-  const text = resp.output_text || '';
+  const text = resp.choices[0]?.message?.content || '';
   dbg('identifyLLM: response output_text', truncate(text, 600));
 
   let data;

@@ -485,7 +485,6 @@ function setPlayerSectionsVisible(visible) {
 const docTopicInput = document.getElementById('doc-topic');
 const generateDocBtn = document.getElementById('generate-doc');
 const docOutputEl = document.getElementById('doc-output');
-const docPromptEl = document.getElementById('doc-prompt');
 const sectionDurationSelect = document.getElementById('section-duration');
 const saveStatusEl = document.getElementById('save-status');
 const loadIdInput = document.getElementById('load-id-input');
@@ -1354,7 +1353,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { if (docStatusEl) docStatusEl.textContent = 'Generating outline…'; } catch {}
         try { if (docRawDetails) { docRawDetails.classList.add('hidden'); docRawDetails.open = false; } } catch {}
         const topic = (docTopicInput && docTopicInput.value ? docTopicInput.value : '').trim();
-        const prompt = (docPromptEl && docPromptEl.value ? docPromptEl.value : '').trim();
         if (!topic) {
             if (docStatusEl) docStatusEl.textContent = 'Please enter a topic (e.g., The Beatles).';
             // hide spinner and re-enable
@@ -1398,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const createResp = await fetch('/api/jobs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic, prompt, narrationTargetSecs })
+                    body: JSON.stringify({ topic, narrationTargetSecs })
                 });
                 if (!createResp.ok) {
                     let errMsg = `Failed to start job: ${createResp.status}`;

@@ -144,10 +144,15 @@ class JobManager {
     job.completedAt = new Date().toISOString();
     job.updatedAt = new Date().toISOString();
 
-    job.emitter.emit('error', {
-      jobId,
-      error: job.error,
-    });
+    // Only emit if there are listeners to avoid crashing the server
+    if (job.emitter.listenerCount('error') > 0) {
+      job.emitter.emit('error', {
+        jobId,
+        error: job.error,
+      });
+    } else {
+      dbg('jobManager: failed (no listeners)', { jobId, error: job.error });
+    }
 
     dbg('jobManager: failed', { jobId, error: job.error });
   }

@@ -32,14 +32,15 @@ async function planMusicDocumentary(topic, topTracks = [], extraInstructions = '
     userPreview: truncate(userPrompt, 400)
   });
 
-  const resp = await openai.responses.create({
-    model: 'gpt-5-mini',
-    reasoning: { effort: 'medium' },
-    instructions: systemPrompt,
-    input: userPrompt
+  const resp = await openai.chat.completions.create({
+    model: 'gpt-4.1',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
   });
 
-  const text = resp.output_text || '';
+  const text = resp.choices[0]?.message?.content || '';
   dbg('musicPlan: response output_text', truncate(text, 800));
 
   let plan;
