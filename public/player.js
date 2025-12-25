@@ -21,6 +21,18 @@ const DEBUG = (() => {
     }
 })();
 
+const DEFAULT_PAGE_TITLE = (() => {
+    try { return (typeof document !== 'undefined' && document.title) ? document.title : 'Music Story'; } catch { return 'Music Story'; }
+})();
+
+function setPageTitleForPlaylist(title) {
+    try {
+        if (typeof document === 'undefined') return;
+        const safeTitle = (title && typeof title === 'string') ? title.trim() : '';
+        document.title = safeTitle ? `Music Story - ${safeTitle}` : DEFAULT_PAGE_TITLE;
+    } catch {}
+}
+
 // Play a YouTube track
 async function playYouTubeTrack(track) {
     try {
@@ -86,6 +98,7 @@ function showEmptyState(message) {
         if (currentTimeElement) currentTimeElement.textContent = '0:00';
         if (durationElement) durationElement.textContent = '0:00';
     } catch {}
+    setPageTitleForPlaylist('');
     try {
         if (playlistElement) playlistElement.innerHTML = '<li class="placeholder">No items. Generate an outline or import a playlist to begin.</li>';
     } catch {}
@@ -760,6 +773,7 @@ function buildPlaylistFromDoc(doc) {
             playlistTitleDisplay.textContent = title;
             playlistTopicDisplay.textContent = topic;
             playlistHeader.classList.remove('hidden');
+            setPageTitleForPlaylist(title);
         }
         
         // Try to load durations for local MP3s to show in the playlist
