@@ -1,0 +1,12 @@
+Topic: {{TOPIC}}
+Summary: {{SUMMARY}}
+Target narration length per segment: {{NARRATION_TARGET_SECS}} seconds
+
+Track plan (with narrative focus):
+{{TRACK_SLOTS}}
+
+Final chosen tracks (slot_id matches plan):
+{{SELECTED_TRACKS}}
+
+Write only the narration JSON. Keep the order and slot_id alignment. Do not include song objects.
+{{EXTRA}}
