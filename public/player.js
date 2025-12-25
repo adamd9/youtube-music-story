@@ -1095,15 +1095,37 @@ function resumeLocalAt(offsetSeconds) {
     }
 }
 
+function stopAtEndOfPlaylist() {
+    try {
+        state.isPlaying = false;
+        updatePlayPauseButton();
+    } catch {}
+    // Best-effort stop of whichever player is active
+    try {
+        if (state.currentTrack && state.currentTrack.type === 'youtube') {
+            if (state.ytPlayer && typeof state.ytPlayer.pauseVideo === 'function') state.ytPlayer.pauseVideo();
+        } else if (narrationAudio) {
+            narrationAudio.pause();
+        }
+    } catch {}
+}
+
 // Play the next track
 function playNext() {
-    const nextIndex = (state.currentTrackIndex + 1) % state.playlist.length;
+    if (!Array.isArray(state.playlist) || state.playlist.length === 0) return;
+    const nextIndex = state.currentTrackIndex + 1;
+    if (nextIndex >= state.playlist.length) {
+        stopAtEndOfPlaylist();
+        return;
+    }
     playTrack(nextIndex);
 }
 
 // Play the previous track
 function playPrevious() {
-    const prevIndex = (state.currentTrackIndex - 1 + state.playlist.length) % state.playlist.length;
+    if (!Array.isArray(state.playlist) || state.playlist.length === 0) return;
+    const prevIndex = state.currentTrackIndex - 1;
+    if (prevIndex < 0) return;
     playTrack(prevIndex);
 }
 
