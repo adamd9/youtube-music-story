@@ -3,9 +3,9 @@ const jobManager = require('../services/jobManager');
 const config = require('../config');
 const path = require('path');
 const fsp = require('fs').promises;
-const { generateMusicDoc } = require('../services/musicDoc');
+const { generateMusicPlan, generateNarrationScript, stitchTimeline } = require('../services/musicDoc');
 const { generateNarrationAlbumArt } = require('../services/albumArt');
-const { mapTimelineToYouTube } = require('../services/youtubeMap');
+const { mapTrackSlotsToYouTube } = require('../services/youtubeMap');
 const { savePlaylist, updatePlaylist } = require('../services/storage');
 const { ttsToMp3Buffer } = require('../services/tts');
 const { dbg } = require('../utils/logger');
@@ -18,37 +18,52 @@ async function runYouTubeDocJob(jobId, params) {
     jobManager.updateProgress(jobId, {
       status: 'running',
       stage: 1,
-      stageLabel: 'Generating outline',
+      stageLabel: 'Planning tracks',
       progress: 5,
-      detail: 'Requesting LLM',
+      detail: 'Drafting alternates and story beats',
     });
 
-    const [doc, artResult] = await Promise.all([
-      generateMusicDoc({ topic, prompt, narrationTargetSecs }),
+    const [plan, artResult] = await Promise.all([
+      generateMusicPlan({ topic, prompt, narrationTargetSecs }),
       generateNarrationAlbumArt({ topic }),
     ]);
 
-    if (artResult && doc && Array.isArray(doc.timeline)) {
-      doc.narrationAlbumArtUrl = artResult.publicUrl || artResult.dataUrl;
+    if (artResult && plan) {
+      plan.narrationAlbumArtUrl = artResult.publicUrl || artResult.dataUrl;
     }
 
     jobManager.updateProgress(jobId, {
       stage: 2,
       stageLabel: 'Preparing playlist',
       progress: 30,
-      detail: 'Mapping YouTube videos',
+      detail: 'Mapping primary tracks and alternates',
     });
 
-    const mappedTimeline = await mapTimelineToYouTube(Array.isArray(doc?.timeline) ? doc.timeline : []);
+    const { selections, debug } = await mapTrackSlotsToYouTube(plan?.track_slots || [], { confidenceThreshold: 0.8 });
+
+    const narration = await generateNarrationScript({
+      topic,
+      summary: plan?.summary || '',
+      trackSlots: plan?.track_slots || [],
+      selections,
+      prompt,
+      narrationTargetSecs,
+    });
+
+    const stitched = stitchTimeline({ plan, narration, selections });
+    if (plan?.narrationAlbumArtUrl) {
+      stitched.narrationAlbumArtUrl = plan.narrationAlbumArtUrl;
+    }
+    stitched._debug = { plan, mapping: debug };
     const playlistRecord = await savePlaylist({
       ownerId: 'anonymous',
-      title: doc?.title || (topic ? `Music history: ${topic}` : 'Music history'),
-      topic: doc?.topic || topic || '',
-      summary: doc?.summary || '',
-      timeline: mappedTimeline,
+      title: stitched?.title || (topic ? `Music history: ${topic}` : 'Music history'),
+      topic: stitched?.topic || topic || '',
+      summary: stitched?.summary || '',
+      timeline: stitched?.timeline || [],
       source: 'youtube',
-      narrationAlbumArtUrl: doc?.narrationAlbumArtUrl || null,
-      _debug: doc?._debug,
+      narrationAlbumArtUrl: stitched?.narrationAlbumArtUrl || null,
+      _debug: stitched?._debug,
     });
 
     const playlistId = playlistRecord.id;
@@ -119,7 +134,7 @@ async function runYouTubeDocJob(jobId, params) {
 
     const updatedPlaylist = await updatePlaylist(playlistId, {
       timeline: timelineWithTts,
-      narrationAlbumArtUrl: doc?.narrationAlbumArtUrl || playlistRecord.narrationAlbumArtUrl || null,
+      narrationAlbumArtUrl: stitched?.narrationAlbumArtUrl || playlistRecord.narrationAlbumArtUrl || null,
     });
 
     jobManager.updateProgress(jobId, {

@@ -1,0 +1,10 @@
+Topic: {{TOPIC}}
+Narration target per segment: {{NARRATION_TARGET_SECS}} seconds
+
+Planner instructions:
+- Build five chronological story beats with one primary track each.
+- Add alternates when you see real risk of ambiguity or famous covers.
+- Keep the total candidate list around ten songs (primary + most-needed alternates), max two alternates per slot.
+
+Provide only the JSON plan. No narration yet.
+{{EXTRA}}

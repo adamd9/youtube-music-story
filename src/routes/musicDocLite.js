@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const config = require('../config');
-const { generateMusicDoc } = require('../services/musicDoc');
+const { generateMusicPlan, generateNarrationScript, stitchTimeline } = require('../services/musicDoc');
 const { generateNarrationAlbumArt } = require('../services/albumArt');
+const { mapTrackSlotsToYouTube } = require('../services/youtubeMap');
 const { dbg } = require('../utils/logger');
 
 // Lightweight documentary generation (YouTube-only app).
@@ -17,19 +18,27 @@ router.post('/api/music-doc-lite', async (req, res) => {
       return res.status(400).json({ error: 'Missing required field: topic (string)' });
     }
 
-    // Fire LLM + album art generation in parallel
-    const docPromise = generateMusicDoc({
-      topic,
-      prompt,
-      narrationTargetSecs
-    });
+    // Fire planner + album art generation in parallel
+    const planPromise = generateMusicPlan({ topic, prompt, narrationTargetSecs });
     const artPromise = generateNarrationAlbumArt({ topic });
 
-    const [data, artResult] = await Promise.all([docPromise, artPromise]);
+    const [plan, artResult] = await Promise.all([planPromise, artPromise]);
 
+    const { selections, debug } = await mapTrackSlotsToYouTube(plan?.track_slots || [], { confidenceThreshold: 0.8 });
+    const narration = await generateNarrationScript({
+      topic,
+      summary: plan?.summary || '',
+      trackSlots: plan?.track_slots || [],
+      selections,
+      prompt,
+      narrationTargetSecs,
+    });
+
+    const data = stitchTimeline({ plan, narration, selections });
     if (artResult && data && Array.isArray(data.timeline)) {
       data.narrationAlbumArtUrl = artResult.publicUrl || artResult.dataUrl;
     }
+    data._debug = { plan, mapping: debug };
 
     dbg('music-doc-lite: generated', { topic, segments: Array.isArray(data?.timeline) ? data.timeline.length : 0 });
     return res.json(data);
