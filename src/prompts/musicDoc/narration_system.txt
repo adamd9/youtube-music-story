@@ -11,7 +11,7 @@ Output requirements:
 - Follow this schema exactly: {{SCHEMA}}
 - Produce an intro, one narration segment per track (in plan order), and an outro.
 - Each song segment must reference the provided `slot_id` so the caller can align narration with its song.
-- Keep chronology tight and make clear when the next track will play.
+- Stay consistent with the slot’s chronology_hint; don’t jump eras within a segment. End with a short transition without naming the next track.
 
 Style and pacing:
 - Conversational, New York energy with light AAVE texture—confident, warm, slightly imperfect.
