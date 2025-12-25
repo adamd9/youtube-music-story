@@ -889,7 +889,6 @@ function renderPlaylist() {
                 <div class="track-artist">${track.artist}</div>
             </div>
             <div class="badges">
-                ${track.type === 'mp3' ? '<span class="badge badge-local">LOCAL</span>' : ''}
                 ${durHtml}
             </div>
         `;
