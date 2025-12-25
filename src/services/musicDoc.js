@@ -11,7 +11,7 @@ const TrackCandidateSchema = z.object({
   album: z.string().nullable(),
   year: z.string().nullable(),
   youtube_hint: z.string().nullable(),
-  note: z.string().nullable().optional(),
+  note: z.string().nullable(),
 });
 
 const TrackSlotSchema = z.object({
