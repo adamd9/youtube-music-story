@@ -2,6 +2,7 @@ const app = require('./app');
 const config = require('./config');
 const fsp = require('fs').promises;
 const path = require('path');
+const { initStorage, closeStorage } = require('./services/storage');
 
 async function startup() {
   try {
@@ -22,12 +23,33 @@ async function startup() {
     console.log('[CFG] albumArtDir:', config.paths.albumArtDir);
     console.log('[ENV] RUNTIME_DATA_DIR:', process.env.RUNTIME_DATA_DIR || '(unset)');
     console.log('[ENV] TTS_OUTPUT_DIR:', process.env.TTS_OUTPUT_DIR || '(unset)');
+    console.log('[ENV] MONGODB_URI:', process.env.MONGODB_URI ? '(set)' : '(unset)');
+    
+    // Initialize storage backend (MongoDB or JSON)
+    await initStorage();
   } catch (e) {
     console.error('[CFG] startup path check failed:', e);
   }
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`Server running on http://localhost:${config.port}`);
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(async () => {
+      await closeStorage();
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', async () => {
+    console.log('SIGINT received, shutting down gracefully');
+    server.close(async () => {
+      await closeStorage();
+      process.exit(0);
+    });
   });
 }
 
