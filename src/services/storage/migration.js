@@ -4,6 +4,17 @@ const { dbg } = require('../../utils/logger');
 
 /**
  * Migrate playlists from JSON files to MongoDB
+ * 
+ * This function is idempotent - it can be called multiple times safely.
+ * It will only migrate playlists once, even if JSON files remain on disk.
+ * 
+ * Migration occurs when ALL conditions are met:
+ * 1. MongoDB is connected
+ * 2. JSON playlist files exist
+ * 3. MongoDB collection is empty (no playlists)
+ * 
+ * On subsequent startups, condition #3 fails, preventing re-migration.
+ * 
  * @returns {Promise<{success: boolean, migratedCount: number, error?: string}>}
  */
 async function migrateJsonToMongo() {
@@ -20,10 +31,11 @@ async function migrateJsonToMongo() {
       return { success: true, migratedCount: 0 };
     }
     
-    // Check if MongoDB already has playlists (avoid duplicate migration)
+    // Check if MongoDB already has playlists (idempotency check - prevents re-migration)
     const existingCount = await mongoStorage.countPlaylists();
     if (existingCount > 0) {
-      dbg('migration: MongoDB already has playlists, skipping migration', { existingCount });
+      console.log(`migration: MongoDB already contains ${existingCount} playlist(s), skipping migration`);
+      dbg('migration: JSON files remain on disk but will not be re-migrated');
       return { success: true, migratedCount: 0 };
     }
     

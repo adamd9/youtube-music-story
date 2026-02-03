@@ -253,4 +253,27 @@ describe('Migration', () => {
     const playlists = await mongoStorage.listPlaylistsByOwner('migration-user1');
     assert.ok(playlists.length >= 2);
   });
+
+  test('should NOT re-migrate on second call (idempotency check)', async () => {
+    // Ensure MongoDB is still connected from previous test
+    assert.strictEqual(mongoStorage.isConnected(), true, 'MongoDB should be connected');
+
+    // Verify MongoDB has playlists from previous migration
+    const countBefore = await mongoStorage.countPlaylists();
+    assert.ok(countBefore >= 2, 'MongoDB should already have migrated playlists');
+
+    // Verify JSON files still exist
+    const jsonTestStorage = require('../src/services/storage/jsonStorage');
+    const hasJson = await jsonTestStorage.hasPlaylists();
+    assert.strictEqual(hasJson, true, 'JSON files should still exist');
+
+    // Run migration again - should skip
+    const result = await migrateJsonToMongo();
+    assert.strictEqual(result.success, true, 'Migration should report success');
+    assert.strictEqual(result.migratedCount, 0, 'Should NOT migrate any playlists (already migrated)');
+
+    // Verify count hasn't changed
+    const countAfter = await mongoStorage.countPlaylists();
+    assert.strictEqual(countAfter, countBefore, 'Playlist count should remain unchanged');
+  });
 });

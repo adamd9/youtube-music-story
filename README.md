@@ -288,6 +288,11 @@ For production deployments or when you need centralized database storage, you ca
 
 **Automatic Migration**: If you have existing JSON playlists and configure MongoDB, the application will automatically migrate them to MongoDB on startup. The JSON files will remain untouched, but all new operations will use MongoDB.
 
+**Migration Idempotency**: The migration only runs once. On subsequent startups, the application detects that MongoDB already contains playlists and skips the migration, even though JSON files remain on disk. This means:
+- **First startup** with MongoDB: Migrates JSON → MongoDB
+- **Second and later startups**: Skips migration (MongoDB already has data)
+- JSON files can safely remain on disk as backups
+
 **Fallback Behavior**: If MongoDB connection fails (invalid URI, network issues, etc.), the application automatically falls back to JSON file storage and logs a warning.
 
 ---
