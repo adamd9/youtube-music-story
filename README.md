@@ -284,14 +284,20 @@ For production deployments or when you need centralized database storage, you ca
    MONGODB_URI=mongodb://localhost:27017/youtube-music-story
    # Or for MongoDB Atlas:
    MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/youtube-music-story
+   
+   # Special characters in password? No problem - the app automatically encodes them
+   MONGODB_URI=mongodb://user:p@ssw0rd!@localhost:27017/youtube-music-story
    ```
 3. **Start the server**: The application will automatically connect to MongoDB and use it for playlist storage
 
+**Special Characters in Credentials**: If your MongoDB password contains special characters like `@`, `:`, or `/`, the application automatically URL-encodes them according to RFC 3986. You can use unencoded credentials in your `.env` file.
+
 **Automatic Migration**: If you have existing JSON playlists and configure MongoDB, the application will automatically migrate them to MongoDB on startup. The JSON files will remain untouched, but all new operations will use MongoDB.
 
-**Migration Idempotency**: The migration only runs once. On subsequent startups, the application detects that MongoDB already contains playlists and skips the migration, even though JSON files remain on disk. This means:
+**Migration Idempotency**: The migration checks if MongoDB actually contains data (not just a marker file). This means:
 - **First startup** with MongoDB: Migrates JSON → MongoDB
 - **Second and later startups**: Skips migration (MongoDB already has data)
+- **If MongoDB is cleared**: Will re-migrate from JSON files
 - JSON files can safely remain on disk as backups
 
 **Fallback Behavior**: If MongoDB connection fails (invalid URI, network issues, etc.), the application automatically falls back to JSON file storage and logs a warning.
@@ -300,6 +306,7 @@ For production deployments or when you need centralized database storage, you ca
 - Identifying which storage backend is active
 - Understanding MongoDB connection errors
 - Diagnosing timeout, authentication, and network issues
+- MongoDB URI credential encoding
 
 ---
 

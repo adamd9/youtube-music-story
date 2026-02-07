@@ -199,6 +199,48 @@ When MongoDB already contains playlists:
 | Authentication failed | Invalid credentials | Wrong username/password, missing permissions |
 | Network error | Connection problem | Network outage, firewall blocking connection |
 | Connection timeout | Server not responding | Server overloaded, network latency |
+| Invalid MongoDB URI | Malformed connection string | Unencoded special characters in credentials |
+
+## MongoDB URI Credentials Encoding
+
+### Special Characters in Passwords
+
+If your MongoDB password contains special characters, they must be URL-encoded according to RFC 3986. The application automatically encodes credentials, but you should be aware of this behavior.
+
+**Characters that need encoding:**
+- `@` → `%40`
+- `:` → `%3A`
+- `/` → `%2F`
+- `?` → `%3F`
+- `#` → `%23`
+- `%` → `%25`
+- `[` → `%5B`
+- `]` → `%5D`
+
+**Example:**
+
+If your password is `p@ss:word`, your MongoDB URI should be:
+```
+# Incorrect (will fail):
+mongodb://user:p@ss:word@localhost:27017/mydb
+
+# The application automatically encodes it to:
+mongodb://user:p%40ss%3Aword@localhost:27017/mydb
+```
+
+**Note:** The application automatically handles this encoding, so you can use the URI with unencoded credentials in your `.env` file. However, if you manually encode credentials, the application will double-encode them, which may cause connection failures.
+
+### Best Practice
+
+Store your MongoDB URI with unencoded credentials in your `.env` file:
+```env
+# Good - Let the application encode it
+MONGODB_URI=mongodb://myuser:p@ssw0rd!@localhost:27017/mydb
+
+# Also works - Already encoded (won't double-encode)
+# But harder to read and maintain
+MONGODB_URI=mongodb://myuser:p%40ssw0rd!@localhost:27017/mydb
+```
 
 ## Troubleshooting Tips
 
