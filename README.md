@@ -174,6 +174,7 @@ You can customize the documentary generation by:
 - **CORS errors**: Serve from `http://localhost:8888` (default) or configure your reverse proxy accordingly
 - **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration
 - **YouTube search not finding songs**: The app uses web scraping which may occasionally fail if YouTube changes their structure
+- **MongoDB connection issues**: Check the startup logs for detailed error messages. See [Server Startup Logging Guide](docs/SERVER_STARTUP_LOGGING.md) for troubleshooting.
 
 ## Architecture Overview
 
@@ -193,7 +194,10 @@ Music Story is built as a modular Express.js application with a clean separation
 - **`tts.js`** - Converts narration text to speech using OpenAI TTS API with customizable voice/speed
 - **`youtubeMap.js`** - Maps songs to YouTube videos using `youtube-sr` web scraping (no API key needed)
 - **`jobManager.js`** - In-memory job queue with SSE progress streaming, handles concurrent generation requests
-- **`storage.js`** - Playlist persistence to JSON files in `data/playlists/`
+- **`storage.js`** - Playlist persistence abstraction layer with MongoDB and JSON file backend support
+- **`storage/mongoStorage.js`** - MongoDB storage implementation with automatic indexing
+- **`storage/jsonStorage.js`** - JSON file storage implementation (atomic writes)
+- **`storage/migration.js`** - Automatic migration from JSON files to MongoDB when configured
 - **`openaiClient.js`** - Configured OpenAI SDK client instance
 
 **Routes** (`src/routes/`):
@@ -256,8 +260,53 @@ Music Story is built as a modular Express.js application with a clean separation
 - `OPENAI_TTS_SPEED` - Playback speed 0.25-4.0 (default: 1.25)
 - `OPENAI_IMAGE_MODEL` - Image generation model for narration album art (default: gpt-image-1)
 - `MOCK_TTS` - Set to 1 to use placeholder MP3s instead of OpenAI (saves costs during development)
+- `MONGODB_URI` - MongoDB connection string (optional). If set, playlists will be stored in MongoDB instead of JSON files. If not set, defaults to JSON file storage in `$RUNTIME_DATA_DIR/playlists`
 - `RUNTIME_DATA_DIR` - Root directory for playlists and TTS files (default: ./data)
 - `TTS_OUTPUT_DIR` - Where to save generated MP3s (default: $RUNTIME_DATA_DIR/tts)
+
+---
+
+## Storage Options
+
+Music Story supports two storage backends for playlists:
+
+### JSON File Storage (Default)
+
+By default, playlists are stored as JSON files in `$RUNTIME_DATA_DIR/playlists` (or `./data/playlists` if `RUNTIME_DATA_DIR` is not set). This requires no additional setup and is suitable for development and small deployments.
+
+### MongoDB Storage (Optional)
+
+For production deployments or when you need centralized database storage, you can configure MongoDB:
+
+1. **Set up MongoDB**: You can use a local MongoDB instance or a cloud service like MongoDB Atlas
+2. **Add connection string to `.env`**:
+   ```env
+   MONGODB_URI=mongodb://localhost:27017/youtube-music-story
+   # Or for MongoDB Atlas:
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/youtube-music-story
+   
+   # Special characters in password? No problem - the app automatically encodes them
+   MONGODB_URI=mongodb://user:p@ssw0rd!@localhost:27017/youtube-music-story
+   ```
+3. **Start the server**: The application will automatically connect to MongoDB and use it for playlist storage
+
+**Special Characters in Credentials**: If your MongoDB password contains special characters like `@`, `:`, or `/`, the application automatically URL-encodes them according to RFC 3986. You can use unencoded credentials in your `.env` file.
+
+**Automatic Migration**: If you have existing JSON playlists and configure MongoDB, the application will automatically migrate them to MongoDB on startup. The JSON files will remain untouched, but all new operations will use MongoDB.
+
+**Migration Idempotency**: The migration checks if MongoDB actually contains data (not just a marker file). This means:
+- **First startup** with MongoDB: Migrates JSON → MongoDB
+- **Second and later startups**: Skips migration (MongoDB already has data)
+- **If MongoDB is cleared**: Will re-migrate from JSON files
+- JSON files can safely remain on disk as backups
+
+**Fallback Behavior**: If MongoDB connection fails (invalid URI, network issues, etc.), the application automatically falls back to JSON file storage and logs a warning.
+
+**Troubleshooting**: The server provides detailed logging during startup to help diagnose connection issues. See [Server Startup Logging Guide](docs/SERVER_STARTUP_LOGGING.md) for details on:
+- Identifying which storage backend is active
+- Understanding MongoDB connection errors
+- Diagnosing timeout, authentication, and network issues
+- MongoDB URI credential encoding
 
 ---
 

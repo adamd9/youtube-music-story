@@ -1,99 +1,126 @@
-const path = require('path');
-const fsp = require('fs').promises;
+const mongoStorage = require('./storage/mongoStorage');
+const jsonStorage = require('./storage/jsonStorage');
+const { migrateJsonToMongo } = require('./storage/migration');
 const { dbg } = require('../utils/logger');
-const config = require('../config');
 
-const DATA_DIR = config.paths.dataDir;
-const PLAYLISTS_DIR = path.join(DATA_DIR, 'playlists');
+let storageBackend = null;
+let isInitialized = false;
 
-async function ensureDirs() {
-  await fsp.mkdir(PLAYLISTS_DIR, { recursive: true });
-}
-
-function genId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-async function savePlaylist({ ownerId, title, topic, summary, timeline, source, narrationAlbumArtUrl, _debug }) {
-  await ensureDirs();
-  const id = genId();
-  const createdAt = new Date().toISOString();
-  const record = {
-    id,
-    ownerId,
-    title,
-    topic,
-    summary,
-    timeline,
-    source: source || null,
-    narrationAlbumArtUrl: narrationAlbumArtUrl || null,
-    _debug: _debug || undefined,
-    createdAt
-  };
-  const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);
-  // Atomic write: write to a unique temp file then rename
-  const tmpPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await fsp.writeFile(tmpPath, JSON.stringify(record, null, 2));
-  await fsp.rename(tmpPath, filePath);
-  dbg('storage: saved playlist', { id, ownerId });
-  return record;
-}
-
-async function getPlaylist(id) {
-  await ensureDirs();
-  const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);
-  // Read with retry/backoff in case a concurrent rename/write just occurred
-  const delays = [50, 100, 150, 250, 400];
-  for (let attempt = 0; attempt < delays.length; attempt++) {
-    try {
-      const data = await fsp.readFile(filePath, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e && e.code === 'ENOENT' && attempt < delays.length - 1) {
-        await new Promise(res => setTimeout(res, delays[attempt]));
-        continue;
+/**
+ * Initialize storage backend based on configuration
+ * This should be called once at application startup
+ */
+async function initStorage() {
+  if (isInitialized) {
+    return;
+  }
+  
+  console.log('');
+  console.log('═'.repeat(70));
+  console.log('STORAGE INITIALIZATION');
+  console.log('═'.repeat(70));
+  
+  const mongoUri = process.env.MONGODB_URI;
+  
+  if (mongoUri) {
+    console.log('[STORAGE] MongoDB URI configured');
+    console.log('[STORAGE] Attempting MongoDB connection...');
+    
+    const connected = await mongoStorage.initConnection(mongoUri);
+    
+    if (connected) {
+      console.log('[STORAGE] Storage backend: MongoDB');
+      storageBackend = mongoStorage;
+      
+      // Attempt migration from JSON to MongoDB
+      console.log('[STORAGE] Checking for JSON to MongoDB migration...');
+      const migrationResult = await migrateJsonToMongo();
+      if (migrationResult.migratedCount > 0) {
+        console.log(`[STORAGE] ✓ Migrated ${migrationResult.migratedCount} playlists from JSON to MongoDB`);
+      } else if (migrationResult.success) {
+        console.log('[STORAGE] No migration needed (MongoDB already has data or no JSON files)');
+      } else {
+        console.error('[STORAGE] ✗ Migration check failed:', migrationResult.error);
       }
-      throw e;
+    } else {
+      console.warn('[STORAGE] MongoDB connection failed - falling back to JSON file storage');
+      console.log('[STORAGE] Storage backend: JSON files');
+      storageBackend = jsonStorage;
     }
+  } else {
+    console.log('[STORAGE] No MongoDB URI configured');
+    console.log('[STORAGE] Storage backend: JSON files');
+    console.log('[STORAGE] Using file system storage in:', process.env.RUNTIME_DATA_DIR || './data/playlists');
+    storageBackend = jsonStorage;
   }
+  
+  console.log('═'.repeat(70));
+  console.log('STORAGE INITIALIZED:', storageBackend === mongoStorage ? 'MongoDB' : 'JSON Files');
+  console.log('═'.repeat(70));
+  console.log('');
+  
+  isInitialized = true;
 }
 
+/**
+ * Get the current storage backend
+ */
+function getStorageBackend() {
+  if (!isInitialized) {
+    // Fallback to JSON storage if not initialized
+    return jsonStorage;
+  }
+  return storageBackend;
+}
+
+/**
+ * Save a new playlist
+ */
+async function savePlaylist(data) {
+  const backend = getStorageBackend();
+  return await backend.savePlaylist(data);
+}
+
+/**
+ * Get a playlist by ID
+ */
+async function getPlaylist(id) {
+  const backend = getStorageBackend();
+  return await backend.getPlaylist(id);
+}
+
+/**
+ * List playlists by owner
+ */
 async function listPlaylistsByOwner(ownerId) {
-  await ensureDirs();
-  const files = await fsp.readdir(PLAYLISTS_DIR);
-  const results = [];
-  for (const f of files) {
-    if (!f.endsWith('.json')) continue;
-    try {
-      const content = await fsp.readFile(path.join(PLAYLISTS_DIR, f), 'utf-8');
-      const rec = JSON.parse(content);
-      if (rec.ownerId === ownerId) {
-        results.push(rec);
-      }
-    } catch {}
-  }
-  // Sort by updatedAt desc (fallback to createdAt)
-  results.sort((a, b) => (
-    (b.updatedAt || b.createdAt || '')
-  ).localeCompare(
-    (a.updatedAt || a.createdAt || '')
-  ));
-  return results;
+  const backend = getStorageBackend();
+  return await backend.listPlaylistsByOwner(ownerId);
 }
 
+/**
+ * Update a playlist
+ */
 async function updatePlaylist(id, partial) {
-  await ensureDirs();
-  const filePath = path.join(PLAYLISTS_DIR, `${id}.json`);
-  const data = await fsp.readFile(filePath, 'utf-8').catch(() => null);
-  if (!data) return null;
-  const current = JSON.parse(data);
-  const merged = { ...current, ...partial, updatedAt: new Date().toISOString() };
-  // Atomic write: write to a unique temp file then rename
-  const tmpPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await fsp.writeFile(tmpPath, JSON.stringify(merged, null, 2));
-  await fsp.rename(tmpPath, filePath);
-  dbg('storage: updated playlist', { id });
-  return merged;
+  const backend = getStorageBackend();
+  return await backend.updatePlaylist(id, partial);
 }
 
-module.exports = { savePlaylist, getPlaylist, listPlaylistsByOwner, updatePlaylist };
+/**
+ * Close storage connections (for graceful shutdown)
+ */
+async function closeStorage() {
+  if (storageBackend === mongoStorage) {
+    await mongoStorage.closeConnection();
+  }
+  isInitialized = false;
+  storageBackend = null;
+}
+
+module.exports = {
+  initStorage,
+  savePlaylist,
+  getPlaylist,
+  listPlaylistsByOwner,
+  updatePlaylist,
+  closeStorage,
+};
