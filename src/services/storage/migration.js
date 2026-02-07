@@ -34,6 +34,9 @@ async function migrateJsonToMongo() {
     }
     
     // Check if MongoDB already has playlists (idempotency check - prevents re-migration)
+    // IMPORTANT: This checks the actual data in MongoDB, not a marker file.
+    // If MongoDB is empty (e.g., was cleared or migration previously went to disk storage),
+    // this check will allow migration to proceed, which is the correct behavior.
     const existingCount = await mongoStorage.countPlaylists();
     if (existingCount > 0) {
       console.log(`[MIGRATION] Skipping: MongoDB already contains ${existingCount} playlist(s)`);

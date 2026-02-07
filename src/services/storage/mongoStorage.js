@@ -20,7 +20,10 @@ async function initConnection(uri) {
     console.log('[STORAGE]   - Connection timeout: 10000ms');
     console.log('[STORAGE]   - Server selection timeout: 5000ms');
     
-    client = new MongoClient(uri, {
+    // Encode credentials in URI to comply with RFC 3986
+    const encodedUri = encodeMongoCredentials(uri);
+    
+    client = new MongoClient(encodedUri, {
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 10000,
     });
@@ -64,6 +67,11 @@ async function initConnection(uri) {
       console.error('[STORAGE]   - Error type: Connection timeout');
       console.error('[STORAGE]   - Cause: Server took too long to respond');
       console.error('[STORAGE]   - Details:', e.message);
+    } else if (e.name === 'MongoInvalidURIError' || e.message.includes('InvalidURI')) {
+      console.error('[STORAGE]   - Error type: Invalid MongoDB URI');
+      console.error('[STORAGE]   - Cause: Malformed connection string or unencoded credentials');
+      console.error('[STORAGE]   - Details:', e.message);
+      console.error('[STORAGE]   - Hint: Special characters in username/password should be URL-encoded');
     } else {
       console.error('[STORAGE]   - Error type:', e.name || 'Unknown');
       console.error('[STORAGE]   - Details:', e.message);
@@ -79,6 +87,47 @@ async function initConnection(uri) {
       collection = null;
     }
     return false;
+  }
+}
+
+/**
+ * Encode MongoDB URI credentials according to RFC 3986
+ * @param {string} uri - MongoDB connection string
+ * @returns {string} - URI with encoded credentials
+ */
+function encodeMongoCredentials(uri) {
+  try {
+    // Pattern to match MongoDB URI with credentials
+    // mongodb://username:password@host or mongodb+srv://username:password@host
+    // Match everything after :// and before the last @ (which is before the host)
+    const credentialPattern = /^(mongodb(?:\+srv)?:\/\/)(.+)@([^@]+)$/;
+    const match = uri.match(credentialPattern);
+    
+    if (match) {
+      const [, protocol, credentialsPart, hostPart] = match;
+      
+      // Split credentials by the first colon
+      const colonIndex = credentialsPart.indexOf(':');
+      if (colonIndex === -1) {
+        // No password, just username
+        const encodedUsername = encodeURIComponent(credentialsPart);
+        return `${protocol}${encodedUsername}@${hostPart}`;
+      }
+      
+      const username = credentialsPart.substring(0, colonIndex);
+      const password = credentialsPart.substring(colonIndex + 1);
+      
+      // Encode username and password according to RFC 3986
+      const encodedUsername = encodeURIComponent(username);
+      const encodedPassword = encodeURIComponent(password);
+      return `${protocol}${encodedUsername}:${encodedPassword}@${hostPart}`;
+    }
+    
+    // No credentials in URI, return as-is
+    return uri;
+  } catch (e) {
+    console.warn('[STORAGE] Failed to encode MongoDB credentials, using URI as-is:', e.message);
+    return uri;
   }
 }
 
