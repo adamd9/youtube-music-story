@@ -174,6 +174,7 @@ You can customize the documentary generation by:
 - **CORS errors**: Serve from `http://localhost:8888` (default) or configure your reverse proxy accordingly
 - **TTS costs/time during development**: Set `MOCK_TTS=1` to use a bundled local MP3 for narration
 - **YouTube search not finding songs**: The app uses web scraping which may occasionally fail if YouTube changes their structure
+- **MongoDB connection issues**: Check the startup logs for detailed error messages. See [Server Startup Logging Guide](docs/SERVER_STARTUP_LOGGING.md) for troubleshooting.
 
 ## Architecture Overview
 
@@ -294,6 +295,11 @@ For production deployments or when you need centralized database storage, you ca
 - JSON files can safely remain on disk as backups
 
 **Fallback Behavior**: If MongoDB connection fails (invalid URI, network issues, etc.), the application automatically falls back to JSON file storage and logs a warning.
+
+**Troubleshooting**: The server provides detailed logging during startup to help diagnose connection issues. See [Server Startup Logging Guide](docs/SERVER_STARTUP_LOGGING.md) for details on:
+- Identifying which storage backend is active
+- Understanding MongoDB connection errors
+- Diagnosing timeout, authentication, and network issues
 
 ---
 
