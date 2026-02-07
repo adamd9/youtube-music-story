@@ -15,29 +15,49 @@ async function initStorage() {
     return;
   }
   
+  console.log('');
+  console.log('═'.repeat(70));
+  console.log('STORAGE INITIALIZATION');
+  console.log('═'.repeat(70));
+  
   const mongoUri = process.env.MONGODB_URI;
   
   if (mongoUri) {
-    dbg('storage: attempting to connect to MongoDB');
+    console.log('[STORAGE] MongoDB URI configured');
+    console.log('[STORAGE] Attempting MongoDB connection...');
+    
     const connected = await mongoStorage.initConnection(mongoUri);
     
     if (connected) {
-      console.log('storage: using MongoDB backend');
+      console.log('[STORAGE] Storage backend: MongoDB');
       storageBackend = mongoStorage;
       
       // Attempt migration from JSON to MongoDB
+      console.log('[STORAGE] Checking for JSON to MongoDB migration...');
       const migrationResult = await migrateJsonToMongo();
       if (migrationResult.migratedCount > 0) {
-        console.log(`storage: migrated ${migrationResult.migratedCount} playlists from JSON to MongoDB`);
+        console.log(`[STORAGE] ✓ Migrated ${migrationResult.migratedCount} playlists from JSON to MongoDB`);
+      } else if (migrationResult.success) {
+        console.log('[STORAGE] No migration needed (MongoDB already has data or no JSON files)');
+      } else {
+        console.error('[STORAGE] ✗ Migration check failed:', migrationResult.error);
       }
     } else {
-      console.warn('storage: MongoDB connection failed, falling back to JSON file storage');
+      console.warn('[STORAGE] MongoDB connection failed - falling back to JSON file storage');
+      console.log('[STORAGE] Storage backend: JSON files');
       storageBackend = jsonStorage;
     }
   } else {
-    dbg('storage: no MongoDB URI configured, using JSON file storage');
+    console.log('[STORAGE] No MongoDB URI configured');
+    console.log('[STORAGE] Storage backend: JSON files');
+    console.log('[STORAGE] Using file system storage in:', process.env.RUNTIME_DATA_DIR || './data/playlists');
     storageBackend = jsonStorage;
   }
+  
+  console.log('═'.repeat(70));
+  console.log('STORAGE INITIALIZED:', storageBackend === mongoStorage ? 'MongoDB' : 'JSON Files');
+  console.log('═'.repeat(70));
+  console.log('');
   
   isInitialized = true;
 }

@@ -16,6 +16,10 @@ function genId() {
  */
 async function initConnection(uri) {
   try {
+    console.log('[STORAGE] Attempting MongoDB connection...');
+    console.log('[STORAGE]   - Connection timeout: 10000ms');
+    console.log('[STORAGE]   - Server selection timeout: 5000ms');
+    
     client = new MongoClient(uri, {
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 10000,
@@ -27,15 +31,44 @@ async function initConnection(uri) {
     db = client.db(dbName);
     collection = db.collection('playlists');
     
+    console.log('[STORAGE]   - Database name:', dbName);
+    console.log('[STORAGE]   - Collection: playlists');
+    
     // Create indexes
+    console.log('[STORAGE]   - Creating indexes...');
     await collection.createIndex({ ownerId: 1 });
     await collection.createIndex({ createdAt: -1 });
     await collection.createIndex({ updatedAt: -1 });
+    console.log('[STORAGE]   - Indexes created successfully');
     
+    console.log('[STORAGE] ✓ MongoDB connection established');
     dbg('mongoStorage: connected successfully', { dbName });
     return true;
   } catch (e) {
-    console.error('mongoStorage: connection failed', e.message);
+    console.error('[STORAGE] ✗ MongoDB connection failed');
+    
+    // Provide detailed error information
+    if (e.name === 'MongoServerSelectionError') {
+      console.error('[STORAGE]   - Error type: Server selection timeout');
+      console.error('[STORAGE]   - Cause: Unable to reach MongoDB server');
+      console.error('[STORAGE]   - Details:', e.message);
+    } else if (e.name === 'MongoAuthenticationError') {
+      console.error('[STORAGE]   - Error type: Authentication failed');
+      console.error('[STORAGE]   - Cause: Invalid credentials');
+      console.error('[STORAGE]   - Details:', e.message);
+    } else if (e.name === 'MongoNetworkError') {
+      console.error('[STORAGE]   - Error type: Network error');
+      console.error('[STORAGE]   - Cause: Network connection issue');
+      console.error('[STORAGE]   - Details:', e.message);
+    } else if (e.name === 'MongoTimeoutError') {
+      console.error('[STORAGE]   - Error type: Connection timeout');
+      console.error('[STORAGE]   - Cause: Server took too long to respond');
+      console.error('[STORAGE]   - Details:', e.message);
+    } else {
+      console.error('[STORAGE]   - Error type:', e.name || 'Unknown');
+      console.error('[STORAGE]   - Details:', e.message);
+    }
+    
     // Clean up on failure
     if (client) {
       try {
