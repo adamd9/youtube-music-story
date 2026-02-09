@@ -29,8 +29,8 @@ async function initConnection(uri) {
     });
     await client.connect();
     
-    // Parse database name from URI or use default
-    const dbName = extractDbName(uri) || 'youtube-music-story';
+    // Parse database name from env var, URI, or use default
+    const dbName = process.env.MONGODB_DB_NAME || extractDbName(uri) || 'youtube-music-story';
     db = client.db(dbName);
     collection = db.collection('playlists');
     

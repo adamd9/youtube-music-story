@@ -261,6 +261,7 @@ Music Story is built as a modular Express.js application with a clean separation
 - `OPENAI_IMAGE_MODEL` - Image generation model for narration album art (default: gpt-image-1)
 - `MOCK_TTS` - Set to 1 to use placeholder MP3s instead of OpenAI (saves costs during development)
 - `MONGODB_URI` - MongoDB connection string (optional). If set, playlists will be stored in MongoDB instead of JSON files. If not set, defaults to JSON file storage in `$RUNTIME_DATA_DIR/playlists`
+- `MONGODB_DB_NAME` - MongoDB database name (optional). If set, overrides the database name from `MONGODB_URI`. Defaults to the database in the URI or 'youtube-music-story'
 - `RUNTIME_DATA_DIR` - Root directory for playlists and TTS files (default: ./data)
 - `TTS_OUTPUT_DIR` - Where to save generated MP3s (default: $RUNTIME_DATA_DIR/tts)
 
@@ -287,8 +288,16 @@ For production deployments or when you need centralized database storage, you ca
    
    # Special characters in password? No problem - the app automatically encodes them
    MONGODB_URI=mongodb://user:p@ssw0rd!@localhost:27017/youtube-music-story
+   
+   # You can also specify the database name separately (overrides the URI database):
+   MONGODB_DB_NAME=my-custom-database
    ```
 3. **Start the server**: The application will automatically connect to MongoDB and use it for playlist storage
+
+**Database Name Configuration**: The database name is determined in this priority order:
+1. `MONGODB_DB_NAME` environment variable (if set)
+2. Database name from `MONGODB_URI` (e.g., `/youtube-music-story` in the URI)
+3. Default: `youtube-music-story`
 
 **Special Characters in Credentials**: If your MongoDB password contains special characters like `@`, `:`, or `/`, the application automatically URL-encodes them according to RFC 3986. You can use unencoded credentials in your `.env` file.
 
