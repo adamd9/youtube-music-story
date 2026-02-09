@@ -71,7 +71,7 @@ async function initStorage() {
   
   console.log('═'.repeat(70));
   if (result.backend === 'MongoDB' && result.connected) {
-    console.log('STORAGE INITIALIZED: MongoDB (Database:', result.dbName + ')');
+    console.log(`STORAGE INITIALIZED: MongoDB (Database: ${result.dbName})`);
   } else if (result.backend === 'MongoDB' && !result.connected) {
     console.log('STORAGE INITIALIZED: JSON Files (MongoDB connection failed)');
   } else {
