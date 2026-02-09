@@ -15,6 +15,7 @@ delete process.env.MONGODB_URI; // Use JSON storage for integration tests
 
 const app = require('../src/app');
 const { initStorage, closeStorage } = require('../src/services/storage');
+const jobManager = require('../src/services/jobManager');
 
 let server;
 
@@ -32,8 +33,16 @@ before(async () => {
 after(async () => {
   // Clean up
   if (server) {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve, reject) => {
+      server.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+      // Force close all connections
+      server.closeAllConnections?.();
+    });
   }
+  jobManager.shutdown();
   await closeStorage();
   await fsp.rm(runtimeDir, { recursive: true, force: true });
 });
