@@ -50,7 +50,11 @@ router.get('/api/playlists/:id', async (req, res) => {
     if (!rec) return res.status(404).json({ error: 'Not found' });
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
-    console.error('get playlist error', e);
+    // Don't log expected "not found" errors (ENOENT for JSON storage, "Playlist not found" for MongoDB)
+    const isNotFoundError = e.code === 'ENOENT' || (e.message && e.message.includes('Playlist not found'));
+    if (!isNotFoundError) {
+      console.error('get playlist error', e);
+    }
     return res.status(404).json({ error: 'Not found' });
   }
 });
@@ -78,8 +82,15 @@ router.patch('/api/playlists/:id', async (req, res) => {
     if (!rec) return res.status(404).json({ error: 'Not found' });
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
-    console.error('update playlist error', e);
-    return res.status(500).json({ error: 'Failed to update playlist' });
+    // Don't log expected "not found" errors (ENOENT for JSON storage, "Playlist not found" for MongoDB)
+    const isNotFoundError = e.code === 'ENOENT' || (e.message && e.message.includes('Playlist not found'));
+    if (!isNotFoundError) {
+      console.error('update playlist error', e);
+    }
+    // Return 404 for not found errors, 500 for other errors
+    const statusCode = isNotFoundError ? 404 : 500;
+    const errorMsg = isNotFoundError ? 'Not found' : 'Failed to update playlist';
+    return res.status(statusCode).json({ error: errorMsg });
   }
 });
 
