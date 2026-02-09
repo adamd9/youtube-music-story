@@ -4,6 +4,16 @@ const { savePlaylist, getPlaylist, listPlaylistsByOwner, updatePlaylist } = requ
 const { mapTimelineToYouTube } = require('../services/youtubeMap');
 const { dbg, truncate } = require('../utils/logger');
 
+/**
+ * Check if an error is an expected "not found" error that shouldn't be logged
+ * @param {Error} error - The error to check
+ * @returns {boolean} - True if it's an expected not found error
+ */
+function isNotFoundError(error) {
+  if (!error) return false;
+  return error.code === 'ENOENT' || (error.message && error.message.includes('Playlist not found'));
+}
+
 // Create/save a generated playlist record
 // body: { ownerId: string, title: string, topic: string, summary: string, timeline: array, source?: 'youtube' }
 router.post('/api/playlists', async (req, res) => {
@@ -51,8 +61,7 @@ router.get('/api/playlists/:id', async (req, res) => {
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
     // Don't log expected "not found" errors (ENOENT for JSON storage, "Playlist not found" for MongoDB)
-    const isNotFoundError = e.code === 'ENOENT' || (e.message && e.message.includes('Playlist not found'));
-    if (!isNotFoundError) {
+    if (!isNotFoundError(e)) {
       console.error('get playlist error', e);
     }
     return res.status(404).json({ error: 'Not found' });
@@ -83,13 +92,13 @@ router.patch('/api/playlists/:id', async (req, res) => {
     return res.json({ ok: true, playlist: rec });
   } catch (e) {
     // Don't log expected "not found" errors (ENOENT for JSON storage, "Playlist not found" for MongoDB)
-    const isNotFoundError = e.code === 'ENOENT' || (e.message && e.message.includes('Playlist not found'));
-    if (!isNotFoundError) {
+    const isExpectedNotFound = isNotFoundError(e);
+    if (!isExpectedNotFound) {
       console.error('update playlist error', e);
     }
     // Return 404 for not found errors, 500 for other errors
-    const statusCode = isNotFoundError ? 404 : 500;
-    const errorMsg = isNotFoundError ? 'Not found' : 'Failed to update playlist';
+    const statusCode = isExpectedNotFound ? 404 : 500;
+    const errorMsg = isExpectedNotFound ? 'Not found' : 'Failed to update playlist';
     return res.status(statusCode).json({ error: errorMsg });
   }
 });
