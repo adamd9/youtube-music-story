@@ -17,6 +17,7 @@ const app = require('../src/app');
 const { generateMusicPlan, generateNarrationScript, stitchTimeline } = require('../src/services/musicDoc');
 const { mapTrackSlotsToYouTube } = require('../src/services/youtubeMap');
 const YouTube = require('youtube-sr').default;
+const jobManager = require('../src/services/jobManager');
 const server = http.createServer(app);
 
 async function invokeApp({ method = 'GET', url = '/', body = null, headers = {} }) {
@@ -66,9 +67,8 @@ async function invokeApp({ method = 'GET', url = '/', body = null, headers = {} 
 
 after(async () => {
   // Clean up test runtime data to keep the workspace tidy.
+  jobManager.shutdown();
   await fsp.rm(runtimeDir, { recursive: true, force: true });
-  const code = typeof process.exitCode === 'number' ? process.exitCode : 0;
-  setImmediate(() => process.exit(code));
 });
 
 test('app starts and serves health check', async () => {
