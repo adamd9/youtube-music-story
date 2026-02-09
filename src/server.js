@@ -24,9 +24,19 @@ async function startup() {
     console.log('[ENV] RUNTIME_DATA_DIR:', process.env.RUNTIME_DATA_DIR || '(unset)');
     console.log('[ENV] TTS_OUTPUT_DIR:', process.env.TTS_OUTPUT_DIR || '(unset)');
     console.log('[ENV] MONGODB_URI:', process.env.MONGODB_URI ? '(set)' : '(unset)');
+    console.log('[ENV] MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || '(unset)');
     
     // Initialize storage backend (MongoDB or JSON)
-    await initStorage();
+    const storageInfo = await initStorage();
+    
+    // Log final storage status
+    console.log('[CFG] Storage backend:', storageInfo.backend);
+    if (storageInfo.backend === 'MongoDB') {
+      console.log('[CFG] MongoDB status:', storageInfo.connected ? 'Connected' : 'Failed');
+      if (storageInfo.connected && storageInfo.dbName) {
+        console.log('[CFG] MongoDB database:', storageInfo.dbName);
+      }
+    }
   } catch (e) {
     console.error('[CFG] startup path check failed:', e);
   }

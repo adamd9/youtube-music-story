@@ -157,6 +157,14 @@ function isConnected() {
 }
 
 /**
+ * Get the current database name
+ * @returns {string|null} - Database name or null if not connected
+ */
+function getDatabaseName() {
+  return db ? db.databaseName : null;
+}
+
+/**
  * Close MongoDB connection
  */
 async function closeConnection() {
@@ -292,6 +300,7 @@ async function countPlaylists() {
 module.exports = {
   initConnection,
   isConnected,
+  getDatabaseName,
   closeConnection,
   savePlaylist,
   getPlaylist,
